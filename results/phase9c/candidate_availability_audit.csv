@@ -1,0 +1,5 @@
+split,method,source,n,candidate_x_present,candidate_y_present,candidate_reconstruction_needed,alpha075_roundtrip_max_difference_px,alpha075_roundtrip_mean_difference_px,roundtrip_pass_lt_1e6,status
+OOF,BASELINE_8,outputs\phase9b_extended_train_singleframe\oof\baseline_oof_predictions_reused.csv,13800,True,True,False,8.038873388460929e-14,1.0155886749902041e-14,True,DIRECT_CANDIDATE_AVAILABLE
+OOF,EXTENDED_12,outputs\phase9b_extended_train_singleframe\oof\extended_oof_predictions.csv,13800,True,True,False,8.038873388460929e-14,9.880134843823347e-15,True,DIRECT_CANDIDATE_AVAILABLE
+Val,BASELINE_8,outputs\phase9b_extended_train_singleframe\final\val_baseline_predictions_reused.csv,4600,True,True,False,8.526512829121202e-14,8.883639220593714e-15,True,DIRECT_CANDIDATE_AVAILABLE
+Val,EXTENDED_12,outputs\phase9b_extended_train_singleframe\final\val_extended_predictions.csv,4600,True,True,False,8.038873388460929e-14,8.190970788081514e-15,True,DIRECT_CANDIDATE_AVAILABLE

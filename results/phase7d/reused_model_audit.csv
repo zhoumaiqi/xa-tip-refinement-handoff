@@ -1,0 +1,136 @@
+scope,arm,base_seed,effective_seed,fold,held_case,reused,source,reason
+OOF,A,20260918,20260919,1,131,False,fresh,No exact historical match
+OOF,B,20260918,20260919,1,131,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_1_131.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260919,1,131,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_1_131.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260918,20260920,2,15716,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase6g_oof_shrinkage_refinement\folds\fold_02_15716\best.pth,Phase6G best checkpoint exactly epoch 3
+OOF,B,20260918,20260920,2,15716,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_2_15716.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260920,2,15716,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_2_15716.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260918,20260921,3,20260706004,False,fresh,No exact historical match
+OOF,B,20260918,20260921,3,20260706004,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_3_20260706004.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260921,3,20260706004,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_3_20260706004.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260918,20260922,4,202607130347,False,fresh,No exact historical match
+OOF,B,20260918,20260922,4,202607130347,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_4_202607130347.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260922,4,202607130347,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_4_202607130347.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260918,20260923,5,361,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase6g_oof_shrinkage_refinement\folds\fold_05_361\best.pth,Phase6G best checkpoint exactly epoch 3
+OOF,B,20260918,20260923,5,361,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_5_361.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260923,5,361,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_5_361.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260918,20260924,6,4904,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase6g_oof_shrinkage_refinement\folds\fold_06_4904\best.pth,Phase6G best checkpoint exactly epoch 3
+OOF,B,20260918,20260924,6,4904,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_6_4904.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260924,6,4904,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_6_4904.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260918,20260925,7,6702,False,fresh,No exact historical match
+OOF,B,20260918,20260925,7,6702,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_7_6702.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260925,7,6702,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_7_6702.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260918,20260926,8,9950,False,fresh,No exact historical match
+OOF,B,20260918,20260926,8,9950,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\control_fold_8_9950.pth,Phase7B exact paired 3-epoch run
+OOF,C,20260918,20260926,8,9950,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\temporal_fold_8_9950.pth,Phase7B exact paired 3-epoch run
+OOF,A,20260919,20260920,1,131,False,fresh,No exact historical match
+OOF,B,20260919,20260920,1,131,False,fresh,No exact historical match
+OOF,C,20260919,20260920,1,131,False,fresh,No exact historical match
+OOF,A,20260919,20260921,2,15716,False,fresh,No exact historical match
+OOF,B,20260919,20260921,2,15716,False,fresh,No exact historical match
+OOF,C,20260919,20260921,2,15716,False,fresh,No exact historical match
+OOF,A,20260919,20260922,3,20260706004,False,fresh,No exact historical match
+OOF,B,20260919,20260922,3,20260706004,False,fresh,No exact historical match
+OOF,C,20260919,20260922,3,20260706004,False,fresh,No exact historical match
+OOF,A,20260919,20260923,4,202607130347,False,fresh,No exact historical match
+OOF,B,20260919,20260923,4,202607130347,False,fresh,No exact historical match
+OOF,C,20260919,20260923,4,202607130347,False,fresh,No exact historical match
+OOF,A,20260919,20260924,5,361,False,fresh,No exact historical match
+OOF,B,20260919,20260924,5,361,False,fresh,No exact historical match
+OOF,C,20260919,20260924,5,361,False,fresh,No exact historical match
+OOF,A,20260919,20260925,6,4904,False,fresh,No exact historical match
+OOF,B,20260919,20260925,6,4904,False,fresh,No exact historical match
+OOF,C,20260919,20260925,6,4904,False,fresh,No exact historical match
+OOF,A,20260919,20260926,7,6702,False,fresh,No exact historical match
+OOF,B,20260919,20260926,7,6702,False,fresh,No exact historical match
+OOF,C,20260919,20260926,7,6702,False,fresh,No exact historical match
+OOF,A,20260919,20260927,8,9950,False,fresh,No exact historical match
+OOF,B,20260919,20260927,8,9950,False,fresh,No exact historical match
+OOF,C,20260919,20260927,8,9950,False,fresh,No exact historical match
+OOF,A,20260920,20260921,1,131,False,fresh,No exact historical match
+OOF,B,20260920,20260921,1,131,False,fresh,No exact historical match
+OOF,C,20260920,20260921,1,131,False,fresh,No exact historical match
+OOF,A,20260920,20260922,2,15716,False,fresh,No exact historical match
+OOF,B,20260920,20260922,2,15716,False,fresh,No exact historical match
+OOF,C,20260920,20260922,2,15716,False,fresh,No exact historical match
+OOF,A,20260920,20260923,3,20260706004,False,fresh,No exact historical match
+OOF,B,20260920,20260923,3,20260706004,False,fresh,No exact historical match
+OOF,C,20260920,20260923,3,20260706004,False,fresh,No exact historical match
+OOF,A,20260920,20260924,4,202607130347,False,fresh,No exact historical match
+OOF,B,20260920,20260924,4,202607130347,False,fresh,No exact historical match
+OOF,C,20260920,20260924,4,202607130347,False,fresh,No exact historical match
+OOF,A,20260920,20260925,5,361,False,fresh,No exact historical match
+OOF,B,20260920,20260925,5,361,False,fresh,No exact historical match
+OOF,C,20260920,20260925,5,361,False,fresh,No exact historical match
+OOF,A,20260920,20260926,6,4904,False,fresh,No exact historical match
+OOF,B,20260920,20260926,6,4904,False,fresh,No exact historical match
+OOF,C,20260920,20260926,6,4904,False,fresh,No exact historical match
+OOF,A,20260920,20260927,7,6702,False,fresh,No exact historical match
+OOF,B,20260920,20260927,7,6702,False,fresh,No exact historical match
+OOF,C,20260920,20260927,7,6702,False,fresh,No exact historical match
+OOF,A,20260920,20260928,8,9950,False,fresh,No exact historical match
+OOF,B,20260920,20260928,8,9950,False,fresh,No exact historical match
+OOF,C,20260920,20260928,8,9950,False,fresh,No exact historical match
+OOF,A,20260921,20260922,1,131,False,fresh,No exact historical match
+OOF,B,20260921,20260922,1,131,False,fresh,No exact historical match
+OOF,C,20260921,20260922,1,131,False,fresh,No exact historical match
+OOF,A,20260921,20260923,2,15716,False,fresh,No exact historical match
+OOF,B,20260921,20260923,2,15716,False,fresh,No exact historical match
+OOF,C,20260921,20260923,2,15716,False,fresh,No exact historical match
+OOF,A,20260921,20260924,3,20260706004,False,fresh,No exact historical match
+OOF,B,20260921,20260924,3,20260706004,False,fresh,No exact historical match
+OOF,C,20260921,20260924,3,20260706004,False,fresh,No exact historical match
+OOF,A,20260921,20260925,4,202607130347,False,fresh,No exact historical match
+OOF,B,20260921,20260925,4,202607130347,False,fresh,No exact historical match
+OOF,C,20260921,20260925,4,202607130347,False,fresh,No exact historical match
+OOF,A,20260921,20260926,5,361,False,fresh,No exact historical match
+OOF,B,20260921,20260926,5,361,False,fresh,No exact historical match
+OOF,C,20260921,20260926,5,361,False,fresh,No exact historical match
+OOF,A,20260921,20260927,6,4904,False,fresh,No exact historical match
+OOF,B,20260921,20260927,6,4904,False,fresh,No exact historical match
+OOF,C,20260921,20260927,6,4904,False,fresh,No exact historical match
+OOF,A,20260921,20260928,7,6702,False,fresh,No exact historical match
+OOF,B,20260921,20260928,7,6702,False,fresh,No exact historical match
+OOF,C,20260921,20260928,7,6702,False,fresh,No exact historical match
+OOF,A,20260921,20260929,8,9950,False,fresh,No exact historical match
+OOF,B,20260921,20260929,8,9950,False,fresh,No exact historical match
+OOF,C,20260921,20260929,8,9950,False,fresh,No exact historical match
+OOF,A,20260922,20260923,1,131,False,fresh,No exact historical match
+OOF,B,20260922,20260923,1,131,False,fresh,No exact historical match
+OOF,C,20260922,20260923,1,131,False,fresh,No exact historical match
+OOF,A,20260922,20260924,2,15716,False,fresh,No exact historical match
+OOF,B,20260922,20260924,2,15716,False,fresh,No exact historical match
+OOF,C,20260922,20260924,2,15716,False,fresh,No exact historical match
+OOF,A,20260922,20260925,3,20260706004,False,fresh,No exact historical match
+OOF,B,20260922,20260925,3,20260706004,False,fresh,No exact historical match
+OOF,C,20260922,20260925,3,20260706004,False,fresh,No exact historical match
+OOF,A,20260922,20260926,4,202607130347,False,fresh,No exact historical match
+OOF,B,20260922,20260926,4,202607130347,False,fresh,No exact historical match
+OOF,C,20260922,20260926,4,202607130347,False,fresh,No exact historical match
+OOF,A,20260922,20260927,5,361,False,fresh,No exact historical match
+OOF,B,20260922,20260927,5,361,False,fresh,No exact historical match
+OOF,C,20260922,20260927,5,361,False,fresh,No exact historical match
+OOF,A,20260922,20260928,6,4904,False,fresh,No exact historical match
+OOF,B,20260922,20260928,6,4904,False,fresh,No exact historical match
+OOF,C,20260922,20260928,6,4904,False,fresh,No exact historical match
+OOF,A,20260922,20260929,7,6702,False,fresh,No exact historical match
+OOF,B,20260922,20260929,7,6702,False,fresh,No exact historical match
+OOF,C,20260922,20260929,7,6702,False,fresh,No exact historical match
+OOF,A,20260922,20260930,8,9950,False,fresh,No exact historical match
+OOF,B,20260922,20260930,8,9950,False,fresh,No exact historical match
+OOF,C,20260922,20260930,8,9950,False,fresh,No exact historical match
+Final,A,20260918,20260918,0,VAL,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase6g_oof_shrinkage_refinement\checkpoints\final_full_train.pth,"Phase6G full 2784, fixed 3 epochs"
+Final,B,20260918,20260918,0,VAL,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\final_control.pth,Phase7B exact full-Train 3-epoch run
+Final,C,20260918,20260918,0,VAL,True,C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa\outputs\phase7b_causal_3frame_hrnet\checkpoints\final_temporal.pth,Phase7B exact full-Train 3-epoch run
+Final,A,20260919,20260919,0,VAL,False,fresh,No exact historical match
+Final,B,20260919,20260919,0,VAL,False,fresh,No exact historical match
+Final,C,20260919,20260919,0,VAL,False,fresh,No exact historical match
+Final,A,20260920,20260920,0,VAL,False,fresh,No exact historical match
+Final,B,20260920,20260920,0,VAL,False,fresh,No exact historical match
+Final,C,20260920,20260920,0,VAL,False,fresh,No exact historical match
+Final,A,20260921,20260921,0,VAL,False,fresh,No exact historical match
+Final,B,20260921,20260921,0,VAL,False,fresh,No exact historical match
+Final,C,20260921,20260921,0,VAL,False,fresh,No exact historical match
+Final,A,20260922,20260922,0,VAL,False,fresh,No exact historical match
+Final,B,20260922,20260922,0,VAL,False,fresh,No exact historical match
+Final,C,20260922,20260922,0,VAL,False,fresh,No exact historical match

@@ -1,0 +1,53 @@
+{
+  "device": "NVIDIA RTX A2000 12GB",
+  "amp": false,
+  "attempts": [
+    {
+      "physical_batch": 16,
+      "status": "PASS",
+      "peak_memory_bytes": 3575542272,
+      "loss": 0.023777896538376808,
+      "gradients_finite": {
+        "backbone": true,
+        "fusion": true,
+        "head": true
+      }
+    }
+  ],
+  "physical_batch": 16,
+  "gradient_accumulation": 1,
+  "effective_batch": 16,
+  "input_shape": [
+    16,
+    3,
+    3,
+    256,
+    256
+  ],
+  "shared_feature_shape": [
+    16,
+    3,
+    18,
+    64,
+    64
+  ],
+  "concatenated_shape": [
+    16,
+    54,
+    64,
+    64
+  ],
+  "fused_shape": [
+    16,
+    18,
+    64,
+    64
+  ],
+  "output_shape": [
+    16,
+    1,
+    64,
+    64
+  ],
+  "inference_ms_per_window": 6.364186249993509
+}

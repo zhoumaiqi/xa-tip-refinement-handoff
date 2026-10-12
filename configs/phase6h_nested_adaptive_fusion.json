@@ -1,0 +1,34 @@
+{
+  "seed": 20260918,
+  "manifest": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/model_clean_v1/model_clean_frames.csv",
+  "phase6b_config": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/phase6b_local_refinement_256_baseline/config.json",
+  "phase6g_dir": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/phase6g_oof_shrinkage_refinement",
+  "phase6f_val_predictions": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/phase6f_residual_regression_oof/val_predictions.csv",
+  "output_dir": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/phase6h_nested_adaptive_fusion",
+  "actions": [0.0, 0.75, 1.0],
+  "fixed_alpha": 0.75,
+  "base_epochs": 3,
+  "batch_size": 16,
+  "num_workers": 0,
+  "peak_suppression_radius": 6,
+  "meta_features": ["peak", "margin", "correction_magnitude", "motion_disagreement", "has_previous_frame"],
+  "meta_model": {
+    "scaler": "StandardScaler",
+    "classifier": "LogisticRegression",
+    "penalty": "l2",
+    "C": 1.0,
+    "solver": "lbfgs",
+    "max_iter": 2000,
+    "class_weight": null,
+    "case_balanced_weights": true
+  },
+  "forbidden": {
+    "test": true,
+    "val_tuning": true,
+    "future_frames": true,
+    "case_identity_features": true,
+    "continuous_alpha": true,
+    "hyperparameter_search": true,
+    "old_tip_checkpoint_initialization": true
+  }
+}

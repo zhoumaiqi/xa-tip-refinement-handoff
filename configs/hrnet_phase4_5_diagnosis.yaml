@@ -1,0 +1,51 @@
+project:
+  manifest: outputs/model_clean_v1/model_clean_frames.csv
+  cached_raw_intensity: outputs/model_clean_v1/intensity_frame_stats.csv
+  phase4_dir: outputs/hrnet_phase4_baseline
+  checkpoint: outputs/hrnet_phase4_baseline/checkpoints/best_by_val_mean_error.pth
+  output_dir: outputs/hrnet_phase4_5_diagnosis
+
+experiment:
+  seed: 20260918
+  expected_train_frames: 2784
+  expected_val_frames: 928
+  expected_val_cases: ["13424", "2148", "6700"]
+
+data:
+  preprocessing: minmax
+  original_size: [1024, 1024]
+  input_size: [512, 512]
+  heatmap_size: [128, 128]
+  sigma: 2.0
+  batch_size: 16
+  num_workers: 0
+  edge_gradient_threshold: 0.05
+  left_edge_width_input_pixels: 8
+
+model:
+  variant: hrnet_w18_small_v2
+  pretrained: false
+  output_channels: 1
+  checkpoint_expected_kind: BEST_BY_VAL_MEAN_ERROR
+  checkpoint_expected_epoch: 6
+
+heatmap_analysis:
+  independent_peak_suppression_radius: 6
+  entropy_definition: softmax_spatial_normalized_by_log_pixel_count
+  foreground_threshold: 0.1
+  additional_foreground_threshold: 0.01
+  save_full_heatmaps_float16: true
+
+position_analysis:
+  histogram_bins: 32
+  high_density_mass_fraction: 0.5
+
+sampling:
+  train_fullframe_count: 24
+  val_per_case_count: 16
+  failure_best_count: 20
+  failure_median_count: 20
+  failure_worst_count: 40
+  border_montage_max_count: 24
+  tip_roi_size: 128
+

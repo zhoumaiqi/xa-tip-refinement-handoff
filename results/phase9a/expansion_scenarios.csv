@@ -1,0 +1,4 @@
+scenario,cases,new_cases_vs_current,series,frames,new_case_frames,existing_train_case_extra_frames,frozen_val_included
+Scenario 0 — Current,8,0,12,2784,0,0,False
+Scenario 1 — Conservative Tier A,8,0,12,2784,0,0,False
+Scenario 2 — Tier A + B,14,6,22,5781,2997,0,False

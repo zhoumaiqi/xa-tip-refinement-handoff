@@ -1,0 +1,24 @@
+{
+  "train_frames": 2784,
+  "train_cases": [
+    "131",
+    "15716",
+    "20260706004",
+    "202607130347",
+    "361",
+    "4904",
+    "6702",
+    "9950"
+  ],
+  "train_series": 12,
+  "val_frames_reserved_not_loaded": 928,
+  "val_cases_reserved_not_loaded": [
+    "13424",
+    "2148",
+    "6700"
+  ],
+  "case_overlap": 0,
+  "series_overlap": 0,
+  "path_overlap": 0,
+  "val_used_for_alpha_selection": false
+}

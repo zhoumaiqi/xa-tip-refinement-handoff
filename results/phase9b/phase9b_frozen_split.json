@@ -1,0 +1,90 @@
+{
+  "algorithm": "SHA256('phase9b|20260924|' + exact_case_id), ascending; first 2 FINAL_TEST, last 4 EXTENDED_NEW_TRAIN",
+  "candidate_hash_order": [
+    {
+      "case_id": "908",
+      "sha256": "06a424a6263177f2f8c5c00e7bbb0aa0706f1d750195e4811598b8a9e55788b4",
+      "assignment": "FINAL_TEST"
+    },
+    {
+      "case_id": "771",
+      "sha256": "5ca91ac0a620072b24860f14e2e58c18d9afcbd921594993caf6b8679897040f",
+      "assignment": "FINAL_TEST"
+    },
+    {
+      "case_id": "4274",
+      "sha256": "8a33225be51b7cd1c8d0e3c6d8d3b269414f8e800b1d83f02ab30741854efa7c",
+      "assignment": "EXTENDED_NEW_TRAIN"
+    },
+    {
+      "case_id": "14-cbct",
+      "sha256": "9906dce2268c5087f0b6a3e2461774f732edb7a7d31650e7804e928ee9eb9833",
+      "assignment": "EXTENDED_NEW_TRAIN"
+    },
+    {
+      "case_id": "2768",
+      "sha256": "9ee21f0e092352814462e047b48757c7a6e8a0bfcab7cf5a435fdbc16a9083f3",
+      "assignment": "EXTENDED_NEW_TRAIN"
+    },
+    {
+      "case_id": "658",
+      "sha256": "e424744d8e826e83ff017073c7b25235d1c356094ebfc140a53ad249b9ffc643",
+      "assignment": "EXTENDED_NEW_TRAIN"
+    }
+  ],
+  "summary": {
+    "ORIGINAL_TRAIN": {
+      "cases": 8,
+      "series": 12,
+      "frames": 2784,
+      "case_ids": [
+        "131",
+        "15716",
+        "20260706004",
+        "202607130347",
+        "361",
+        "4904",
+        "6702",
+        "9950"
+      ]
+    },
+    "FROZEN_VAL": {
+      "cases": 3,
+      "series": 4,
+      "frames": 928,
+      "case_ids": [
+        "13424",
+        "2148",
+        "6700"
+      ]
+    },
+    "EXTENDED_NEW_TRAIN": {
+      "cases": 4,
+      "series": 5,
+      "frames": 1329,
+      "case_ids": [
+        "14-cbct",
+        "2768",
+        "4274",
+        "658"
+      ]
+    },
+    "FINAL_TEST": {
+      "cases": 2,
+      "series": 5,
+      "frames": 1668,
+      "case_ids": [
+        "771",
+        "908"
+      ]
+    }
+  },
+  "extended_train_total": {
+    "cases": 12,
+    "series": 17,
+    "frames": 4113
+  },
+  "split_sha256": "db0944eb9c26ce0a310edae029fff9dcfb507cac7bf4cac9c127dfbbff85844e",
+  "frozen": true,
+  "test_used": false
+}

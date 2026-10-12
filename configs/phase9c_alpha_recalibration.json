@@ -1,0 +1,20 @@
+{
+  "output_dir": "outputs/phase9c_alpha_recalibration",
+  "phase9b_dir": "outputs/phase9b_extended_train_singleframe",
+  "baseline_oof_predictions": "outputs/phase9b_extended_train_singleframe/oof/baseline_oof_predictions_reused.csv",
+  "extended_oof_predictions": "outputs/phase9b_extended_train_singleframe/oof/extended_oof_predictions.csv",
+  "baseline_val_predictions": "outputs/phase9b_extended_train_singleframe/final/val_baseline_predictions_reused.csv",
+  "extended_val_predictions": "outputs/phase9b_extended_train_singleframe/final/val_extended_predictions.csv",
+  "alpha_grid": [0.0, 0.25, 0.5, 0.75, 1.0],
+  "historical_alpha": 0.75,
+  "tie_tolerance_px": 0.05,
+  "seeds": [20260918, 20260919, 20260920, 20260921, 20260922],
+  "old_cases": ["131", "15716", "20260706004", "202607130347", "361", "4904", "6702", "9950"],
+  "frozen_val_cases": ["13424", "2148", "6700"],
+  "reserved_test_cases": ["908", "771"],
+  "expected_oof_rows_per_method": 13800,
+  "expected_val_rows_per_method": 4600,
+  "training": "NONE",
+  "model_inference": "NONE",
+  "test_used": false
+}

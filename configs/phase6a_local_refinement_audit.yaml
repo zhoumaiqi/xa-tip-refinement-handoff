@@ -1,0 +1,33 @@
+project:
+  manifest: outputs/model_clean_v1/model_clean_frames.csv
+  output_dir: outputs/phase6a_local_refinement_audit
+
+experiment:
+  seed: 20260921
+  expected_train_frames: 2784
+  expected_val_frames: 928
+  image_size: 1024
+  roi_sizes: [128, 192, 256, 320, 384, 512]
+  focus_roi_sizes: [256, 320, 384, 512]
+  safe_margin_px: [0, 8, 16, 32, 64]
+
+jitter:
+  monte_carlo_repetitions: 100
+  uniform_max_abs_px: [8, 16, 24, 32, 48, 64]
+  gaussian_sigma_px: [8, 16, 24, 32, 48]
+  gaussian_clip_sigma: 3
+  empirical_bootstrap_repetitions: 1000
+
+synthetic_tail:
+  additional_radius_px: [0, 32, 64, 96, 128, 160, 192]
+  directions: 16
+
+sampling:
+  noise_train_frames_per_series: 4
+  preview_train_frames_per_series: 2
+  preview_val_frames_per_series: 3
+  preview_roi_sizes: [256, 384, 512]
+  noise_roi_sizes: [256, 384]
+  tip_roi_size: 64
+  noise_sigma_normalized: [0.005, 0.01, 0.02, 0.03, 0.05]
+  noise_repetitions: 3

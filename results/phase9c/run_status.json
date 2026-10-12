@@ -1,0 +1,9 @@
+{
+  "status": "complete",
+  "training": false,
+  "inference": false,
+  "baseline_selected_alpha": 0.5,
+  "extended_selected_alpha": 0.5,
+  "final_choice": 2,
+  "test_used": false
+}

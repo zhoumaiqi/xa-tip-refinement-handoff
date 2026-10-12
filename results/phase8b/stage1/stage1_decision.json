@@ -1,0 +1,22 @@
+{
+  "stage1_pass": true,
+  "F_case_macro_mean": 17.19207607525856,
+  "G_case_macro_mean": 17.075898682516087,
+  "delta_G_minus_F": -0.11617739274247185,
+  "wins": 5,
+  "ties": 0,
+  "losses": 3,
+  "noninferior_cases": 5,
+  "F_frame_mean": 16.19501454926295,
+  "G_frame_mean": 15.58465860485714,
+  "F_median": 10.053570694329906,
+  "G_median": 10.426702693094404,
+  "F_p95": 52.689261667595,
+  "G_p95": 49.110024490616574,
+  "F_harmful_gt10": 0.09130434782608696,
+  "G_harmful_gt10": 0.04492753623188406,
+  "harmful_gate_pass": true,
+  "heatmap_collapse_absent": true,
+  "val_read": false,
+  "test_used": false
+}

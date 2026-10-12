@@ -1,0 +1,10 @@
+Captured: 2026-09-24 Asia/Shanghai
+OS: Windows-10-10.0.19045-SP0
+Training Python: 3.13.5 (conda-forge), C:\ProgramData\anaconda3\envs\TomoReconstruction\python.exe
+Default shell Python at handoff time: 3.13.5 (not the PyTorch training environment)
+GPU: NVIDIA RTX A2000 12GB
+PyTorch: 2.7.1+cu118
+torchvision: 0.22.1+cu118
+CUDA runtime reported by PyTorch: 11.8
+Primary workspace at capture: C:\Users\Walter\Documents\Codex\2026-09-18\files-pasted-by-the-user-xa
+Raw data root (not included): C:\Users\Walter\Desktop\TIP

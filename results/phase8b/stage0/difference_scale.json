@@ -1,0 +1,7 @@
+{
+  "diff_scale": 0.5445083876651972,
+  "percentile": 99.5,
+  "source": "Frozen Train 2760 windows, D1 and D2 pixels pooled",
+  "method": "streaming histogram with 100000 equal bins over [0,1]",
+  "val_used": false
+}

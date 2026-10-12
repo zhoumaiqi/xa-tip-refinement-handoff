@@ -1,0 +1,448 @@
+from __future__ import annotations
+
+import argparse, hashlib, importlib.util, json, math, os, platform, random, shutil, sys, time
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import torch
+from torch.utils.data import Dataset
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_pyc(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load runtime module: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+P7B = load_pyc("phase7b_runtime_d", ROOT / "scripts/__pycache__/phase7b_causal_3frame_hrnet.cpython-313.pyc")
+
+
+class Logger:
+    def __init__(self, path: Path):
+        self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+    def __call__(self, message: str):
+        line = str(message)
+        print(line, flush=True)
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+
+def canonical_hash(obj: Any) -> str:
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def seed_all(seed: int):
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    if torch.cuda.is_available(): torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    try: torch.use_deterministic_algorithms(True, warn_only=True)
+    except Exception: pass
+
+
+def full_rows(d: pd.DataFrame, split: str) -> pd.DataFrame:
+    x = d[d["split"].astype(str).str.lower().eq(split)].copy()
+    x["case_id"] = x["case_code"].astype(str)
+    x["series_id"] = x["series_uid"].astype(str)
+    x["path_t"] = x["dicom_absolute_path"].astype(str)
+    x["raw_x"] = x["raw_col"].astype(float); x["raw_y"] = x["raw_row"].astype(float)
+    x["gt_x"] = x["true_tip_col"].astype(float); x["gt_y"] = x["true_tip_row"].astype(float)
+    x = x.sort_values(["case_id", "series_id", "frame_index"]).reset_index(drop=True)
+    origins = [P7B.origin(a, b, 256) for a, b in zip(x.raw_x, x.raw_y)]
+    x["crop_x0"] = [a for a, _ in origins]; x["crop_y0"] = [b for _, b in origins]
+    x["gt_local_x"] = x.gt_x - x.crop_x0; x["gt_local_y"] = x.gt_y - x.crop_y0
+    return x[["split", "case_id", "series_id", "sequence_identifier", "frame_index", "path_t",
+              "raw_x", "raw_y", "gt_x", "gt_y", "crop_x0", "crop_y0", "gt_local_x", "gt_local_y"]]
+
+
+def build_full_cache(rows: pd.DataFrame, legal: pd.DataFrame, legal_cache: Path, out_path: Path, log: Logger):
+    if out_path.exists():
+        a = np.load(out_path, mmap_mode="r")
+        if a.shape == (len(rows), 1, 256, 256) and a.dtype == np.float32:
+            log(f"[Cache] Reusing {out_path.name}: {a.shape}")
+            return
+        raise RuntimeError(f"Unexpected cache shape/dtype: {out_path} {a.shape} {a.dtype}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out_path.with_suffix(".building.npy")
+    if tmp.exists(): tmp.unlink()
+    arr = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float32, shape=(len(rows), 1, 256, 256))
+    stacks = np.load(legal_cache, mmap_mode="r")
+    key_to_legal = {(str(r.case_id), str(r.series_id), int(r.frame_index)): i for i, r in legal.iterrows()}
+    for i, r in tqdm(rows.iterrows(), total=len(rows), desc="Build full single-frame cache"):
+        key = (str(r.case_id), str(r.series_id), int(r.frame_index))
+        if key in key_to_legal:
+            arr[i, 0] = stacks[key_to_legal[key], 2]
+        else:
+            img = P7B.mmread(str(r.path_t))
+            arr[i, 0] = P7B.crop(img, int(r.crop_x0), int(r.crop_y0), 256)
+    arr.flush(); del arr
+    tmp.replace(out_path)
+    log(f"[Cache] Saved {out_path.name}: {(len(rows),1,256,256)}")
+
+
+class FullDataset(Dataset):
+    def __init__(self, rows: pd.DataFrame, cache: Path, sigma: float = 2.0):
+        self.w = rows.reset_index(drop=True)
+        self.x = np.load(cache, mmap_mode="r")
+        self.y = np.stack([P7B.heatmap(float(r.gt_local_x)/4.0, float(r.gt_local_y)/4.0, 64, sigma)
+                           for r in self.w.itertuples()], axis=0).astype(np.float32)[:, None]
+    def __len__(self): return len(self.w)
+    def __getitem__(self, i):
+        x = np.repeat(np.asarray(self.x[i], dtype=np.float32), 3, axis=0)
+        return torch.from_numpy(x.copy()), torch.from_numpy(self.y[i]), int(i)
+
+
+def normalize_prediction(df: pd.DataFrame) -> pd.DataFrame:
+    z = df.copy()
+    ren = {"phase6b_x":"candidate_x", "phase6b_y":"candidate_y", "phase6g_x":"final_x",
+           "phase6g_y":"final_y", "phase6b_error_px":"candidate_error_px", "phase6g_error_px":"final_error_px",
+           "second_independent_peak_value":"second_peak"}
+    for a,b in ren.items():
+        if b not in z and a in z: z[b] = z[a]
+    # Phase 6G OOF uses model_x/model_y for the full heatmap candidate and
+    # stores no explicit alpha=.75 coordinate.  Reconstruct the same frozen
+    # shrinkage used by Phase 7D so historical and fresh rows share semantics.
+    if "candidate_x" not in z and "model_x" in z:
+        z["candidate_x"] = z["model_x"]
+        z["candidate_y"] = z["model_y"]
+    if "final_x" not in z and "candidate_x" in z:
+        z["final_x"] = z["raw_x"] + CFG["alpha"] * (z["candidate_x"] - z["raw_x"])
+        z["final_y"] = z["raw_y"] + CFG["alpha"] * (z["candidate_y"] - z["raw_y"])
+    if "candidate_error_px" not in z and "candidate_x" in z:
+        z["candidate_error_px"] = np.hypot(z["candidate_x"]-z["gt_x"], z["candidate_y"]-z["gt_y"])
+    if "final_error_px" not in z and "final_x" in z:
+        z["final_error_px"] = np.hypot(z["final_x"]-z["gt_x"], z["final_y"]-z["gt_y"])
+    if "gain_px" not in z: z["gain_px"] = z.raw_error_px-z.final_error_px
+    return z
+
+
+def infer_or_reuse(run_dir: Path, arm: str, base_seed: int, effective_seed: int, fold: int,
+                   held: str, model, dataset, held_idx, device, log: Logger, source: dict|None = None):
+    run_dir.mkdir(parents=True, exist_ok=True)
+    pred_path = run_dir / "predictions.csv"; ckpt_path = run_dir / "checkpoint.pth"
+    complete = run_dir / "complete.json"
+    if complete.exists() and pred_path.exists() and ckpt_path.exists():
+        meta = json.loads(complete.read_text(encoding="utf-8"))
+        if meta.get("config_hash") == GLOBAL_HASH:
+            log(f"  [Resume] {arm} seed={base_seed} fold={fold} case={held}")
+            return normalize_prediction(pd.read_csv(pred_path)), pd.read_csv(run_dir/"training_log.csv")
+        raise RuntimeError(f"Config hash mismatch in {run_dir}")
+    if source:
+        z = normalize_prediction(pd.read_csv(source["predictions"]))
+        if "frame_index" in z: z["frame_index"] = z.frame_index.astype(int)
+        z.to_csv(pred_path, index=False)
+        logs = pd.read_csv(source["training_log"])
+        logs.to_csv(run_dir/"training_log.csv", index=False)
+        shutil.copy2(source["checkpoint"], ckpt_path)
+        reused = True
+    else:
+        model, logs = P7B.train_model(P5, dataset, held_idx["train"], effective_seed, device,
+                                      f"{arm} seed={base_seed} fold={fold}", 3, 16, log)
+        z = P7B.infer(model, dataset, held_idx["held"], device, 0.75, 16)
+        z.to_csv(pred_path, index=False); logs.to_csv(run_dir/"training_log.csv", index=False)
+        torch.save({"model_state_dict":model.state_dict(), "arm":arm, "base_seed":base_seed,
+                    "effective_seed":effective_seed, "fold":fold, "held_case":held, "epochs":3}, ckpt_path)
+        reused = False
+        del model
+        if torch.cuda.is_available(): torch.cuda.empty_cache()
+    meta = {"complete":True,"arm":arm,"base_seed":base_seed,"effective_seed":effective_seed,
+            "fold":fold,"held_case":held,"epochs":3,"reused":reused,"config_hash":GLOBAL_HASH,
+            "finished_at":time.strftime("%Y-%m-%d %H:%M:%S")}
+    complete.write_text(json.dumps(meta,indent=2),encoding="utf-8")
+    return z, logs
+
+
+def metrics(err: np.ndarray, raw: np.ndarray|None=None) -> dict:
+    e=np.asarray(err,float); out={"n":len(e),"mean":e.mean(),"median":np.median(e),"p95":np.percentile(e,95),
+        "p99":np.percentile(e,99),"max":e.max(),"lt5":np.mean(e<5),"lt10":np.mean(e<10),"lt20":np.mean(e<20)}
+    if raw is not None:
+        gain=np.asarray(raw,float)-e
+        out.update({"mean_gain":gain.mean(),"harmful_gt5":np.mean(gain < -5),
+                    "harmful_gt10":np.mean(gain < -10),"harmful_gt20":np.mean(gain < -20)})
+    return out
+
+
+def add_ids(df, arm, base_seed, fold, held):
+    z=normalize_prediction(df); z["arm"]=arm; z["base_seed"]=base_seed; z["fold"]=fold; z["held_case"]=held
+    return z
+
+
+def persistent_rows(df: pd.DataFrame, arm: str, seed: int, split: str) -> dict:
+    total=0; seg=[]
+    for _,g in df.sort_values(["case_id","series_id","frame_index"]).groupby(["case_id","series_id"]):
+        bad=(g.gain_px.to_numpy(float)<-10); total += int(bad.sum()); run=0
+        for b in bad:
+            if b: run+=1
+            elif run: seg.append(run); run=0
+        if run: seg.append(run)
+    return {"split":split,"base_seed":seed,"arm":arm,"total_harmful_frames":total,
+            "persistent_frames_ge3":sum(x for x in seg if x>=3),"segments_ge3":sum(x>=3 for x in seg),
+            "segments_ge5":sum(x>=5 for x in seg),"segments_ge10":sum(x>=10 for x in seg),
+            "max_segment":max(seg) if seg else 0}
+
+
+def safety_rescue(df: pd.DataFrame, arm: str, seed: int, split: str):
+    safe=[]; hard=[]
+    for lo,hi,label in [(0,5,"raw_0_5"),(0,10,"raw_lt10")]:
+        g=df[(df.raw_error_px>=lo)&(df.raw_error_px<hi)]; e=g.final_error_px.to_numpy(float); gain=g.gain_px.to_numpy(float)
+        safe.append({"split":split,"base_seed":seed,"arm":arm,"bin":label,"n":len(g),
+                     "mean":e.mean(),"median":np.median(e),"harmful_gt5":np.mean(gain<-5),"harmful_gt10":np.mean(gain<-10)})
+    for lo,hi in [(20,40),(40,60)]:
+        g=df[(df.raw_error_px>=lo)&(df.raw_error_px<hi)]
+        hard.append({"split":split,"base_seed":seed,"arm":arm,"bin":f"raw_{lo}_{hi}","n":len(g),
+                     "mean_error":g.final_error_px.mean(),"mean_gain":g.gain_px.mean()})
+    return safe,hard
+
+
+def historical_oof_source(arm: str, fold: int, held: str, base_seed: int):
+    if base_seed != 20260918: return None
+    if arm in ("B","C"):
+        mode="control" if arm=="B" else "temporal"
+        d=PH7B/f"folds/fold_{fold}_{held}_{mode}"
+        return {"predictions":d/"predictions.csv","training_log":d/"training_log.csv",
+                "checkpoint":PH7B/f"checkpoints/{mode}_fold_{fold}_{held}.pth","reason":"Phase7B exact paired 3-epoch run"}
+    if arm=="A":
+        d=PH6G/f"folds/fold_{fold:02d}_{held}"
+        if d.exists():
+            c=json.loads((d/"complete.json").read_text(encoding="utf-8"))
+            if int(c.get("best_epoch",-1))==3:
+                return {"predictions":d/"oof_predictions.csv","training_log":d/"training_log.csv",
+                        "checkpoint":d/"best.pth","reason":"Phase6G best checkpoint exactly epoch 3"}
+    return None
+
+
+def historical_final_source(arm: str, base_seed: int):
+    if base_seed != 20260918: return None
+    if arm=="A":
+        return {"predictions":PH6G/"val_predictions.csv","training_log":PH6G/"final_training_log.csv",
+                "checkpoint":PH6G/"checkpoints/final_full_train.pth","reason":"Phase6G full 2784, fixed 3 epochs"}
+    mode="control" if arm=="B" else "temporal"
+    return {"predictions":PH7B/f"val_{mode}_predictions.csv", "training_log":PH7B/f"final_{mode}_training_log.csv",
+            "checkpoint":PH7B/f"checkpoints/final_{mode}.pth","reason":"Phase7B exact full-Train 3-epoch run"}
+
+
+def run_final(run_dir, arm, seed, dataset_train, dataset_val, train_idx, val_idx, device, log, source=None):
+    run_dir.mkdir(parents=True,exist_ok=True); pred_path=run_dir/"predictions.csv"; ckpt=run_dir/"checkpoint.pth"; done=run_dir/"complete.json"
+    if done.exists() and pred_path.exists() and ckpt.exists():
+        meta=json.loads(done.read_text(encoding="utf-8"))
+        if meta.get("config_hash")==GLOBAL_HASH:
+            log(f"  [Resume] FINAL {arm} seed={seed}")
+            return normalize_prediction(pd.read_csv(pred_path)),pd.read_csv(run_dir/"training_log.csv")
+        raise RuntimeError(f"Config hash mismatch in {run_dir}")
+    if source:
+        z=normalize_prediction(pd.read_csv(source["predictions"])); logs=pd.read_csv(source["training_log"])
+        z.to_csv(pred_path,index=False); logs.to_csv(run_dir/"training_log.csv",index=False); shutil.copy2(source["checkpoint"],ckpt); reused=True
+    else:
+        model,logs=P7B.train_model(P5,dataset_train,train_idx,seed,device,f"FINAL {arm} seed={seed}",3,16,log)
+        z=P7B.infer(model,dataset_val,val_idx,device,0.75,16); z.to_csv(pred_path,index=False); logs.to_csv(run_dir/"training_log.csv",index=False)
+        torch.save({"model_state_dict":model.state_dict(),"arm":arm,"base_seed":seed,"epochs":3},ckpt); reused=False
+        del model
+        if torch.cuda.is_available(): torch.cuda.empty_cache()
+    done.write_text(json.dumps({"complete":True,"arm":arm,"base_seed":seed,"epochs":3,"reused":reused,
+                                "config_hash":GLOBAL_HASH,"finished_at":time.strftime("%Y-%m-%d %H:%M:%S")},indent=2),encoding="utf-8")
+    return z,logs
+
+
+def savefig(path: Path):
+    plt.tight_layout(); plt.savefig(path,dpi=180,bbox_inches="tight"); plt.close()
+
+
+def analyze(out: Path, oof: pd.DataFrame, val: pd.DataFrame, logs: pd.DataFrame, reuse_rows: list, random_rows: list, log: Logger):
+    seeds=CFG["seeds"]; arms=["A","B","C"]
+    run_metrics=[]; case_metrics=[]; safe=[]; hard=[]; pers=[]; conf=[]
+    for split,allp in [("OOF",oof),("Val",val)]:
+        for seed in seeds:
+            for arm in arms:
+                g=allp[(allp.base_seed==seed)&(allp.arm==arm)].copy()
+                for alpha,col in [(1.0,"candidate_error_px"),(0.75,"final_error_px")]:
+                    m=metrics(g[col].to_numpy(),g.raw_error_px.to_numpy()); m.update(split=split,base_seed=seed,arm=arm,alpha=alpha)
+                    if alpha==0.75: m["case_macro_mean"]=g.groupby("case_id")[col].mean().mean()
+                    run_metrics.append(m)
+                if split=="OOF":
+                    for case,cg in g.groupby("case_id"):
+                        case_metrics.append({"base_seed":seed,"case_id":case,"arm":arm,"mean":cg.final_error_px.mean(),
+                                             "median":cg.final_error_px.median(),"p95":np.percentile(cg.final_error_px,95)})
+                s,h=safety_rescue(g,arm,seed,split); safe.extend(s); hard.extend(h); pers.append(persistent_rows(g,arm,seed,split))
+                conf.append({"split":split,"base_seed":seed,"arm":arm,"peak_mean":g.peak.mean(),"peak_median":g.peak.median(),
+                             "margin_mean":g.margin.mean(),"margin_median":g.margin.median()})
+    rm=pd.DataFrame(run_metrics); cm=pd.DataFrame(case_metrics); sf=pd.DataFrame(safe); hd=pd.DataFrame(hard); ps=pd.DataFrame(pers); cf=pd.DataFrame(conf)
+    rm.to_csv(out/"oof_metrics_all_runs.csv",index=False)
+    rm[rm.split.eq("OOF")].to_csv(out/"oof_metrics_by_seed.csv",index=False); cm.to_csv(out/"oof_metrics_by_case_seed.csv",index=False)
+    sf.to_csv(out/"easy_case_safety_by_seed.csv",index=False); hd.to_csv(out/"hard_case_rescue_by_seed.csv",index=False); ps.to_csv(out/"persistent_harmful_by_seed.csv",index=False)
+    cf.to_csv(out/"confidence_stability.csv",index=False); pd.DataFrame(reuse_rows).to_csv(out/"reused_model_audit.csv",index=False)
+    pd.DataFrame(random_rows).to_csv(out/"randomness_audit.csv",index=False); logs.to_csv(out/"training_loss_all_runs.csv",index=False)
+    valrm=rm[rm.split.eq("Val")].copy(); valrm.to_csv(out/"val_metrics_all_seeds.csv",index=False)
+    # temporal deltas and case matrix
+    rows=[]; vrows=[]; directions=[]
+    for seed in seeds:
+        ob=rm[(rm.split.eq("OOF"))&(rm.base_seed.eq(seed))&(rm.arm.eq("B"))&(rm.alpha.eq(.75))].iloc[0]
+        oc=rm[(rm.split.eq("OOF"))&(rm.base_seed.eq(seed))&(rm.arm.eq("C"))&(rm.alpha.eq(.75))].iloc[0]
+        vb=rm[(rm.split.eq("Val"))&(rm.base_seed.eq(seed))&(rm.arm.eq("B"))&(rm.alpha.eq(.75))].iloc[0]
+        vc=rm[(rm.split.eq("Val"))&(rm.base_seed.eq(seed))&(rm.arm.eq("C"))&(rm.alpha.eq(.75))].iloc[0]
+        bc=cm[cm.base_seed.eq(seed)].pivot(index="case_id",columns="arm",values="mean")
+        wins=int((bc.C<bc.B).sum()); losses=int((bc.C>bc.B).sum()); ties=8-wins-losses
+        rows.append({"base_seed":seed,"B_macro":ob.case_macro_mean,"C_macro":oc.case_macro_mean,"temporal_delta_C_minus_B":oc.case_macro_mean-ob.case_macro_mean,"case_wins":wins,"case_losses":losses,"case_ties":ties})
+        vrows.append({"base_seed":seed,"B_mean":vb["mean"],"C_mean":vc["mean"],"temporal_delta_C_minus_B":vc["mean"]-vb["mean"]})
+        directions.append({"base_seed":seed,"oof_delta":oc.case_macro_mean-ob.case_macro_mean,"val_delta":vc["mean"]-vb["mean"],
+                           "oof_direction":"win" if oc.case_macro_mean<ob.case_macro_mean else "lose",
+                           "val_direction":"win" if vc["mean"]<vb["mean"] else "lose"})
+    td=pd.DataFrame(rows); vd=pd.DataFrame(vrows); dr=pd.DataFrame(directions)
+    td.to_csv(out/"temporal_delta_by_seed.csv",index=False); vd.to_csv(out/"val_temporal_delta_by_seed.csv",index=False); dr.to_csv(out/"oof_vs_val_direction.csv",index=False)
+    mat=cm.pivot_table(index=["base_seed","case_id"],columns="arm",values="mean").reset_index(); mat["temporal_minus_control"]=mat.C-mat.B
+    mat.to_csv(out/"temporal_case_seed_matrix.csv",index=False)
+    # A vs B
+    ab=[]; dist=[]
+    for seed in seeds:
+        a=rm[(rm.split.eq("OOF"))&(rm.base_seed.eq(seed))&(rm.arm.eq("A"))&(rm.alpha.eq(.75))].iloc[0]
+        b=rm[(rm.split.eq("OOF"))&(rm.base_seed.eq(seed))&(rm.arm.eq("B"))&(rm.alpha.eq(.75))].iloc[0]
+        ab.append({"base_seed":seed,"A_macro":a.case_macro_mean,"B_macro":b.case_macro_mean,"sample_set_delta_B_minus_A":b.case_macro_mean-a.case_macro_mean})
+        ga=oof[(oof.base_seed.eq(seed))&(oof.arm.eq("A"))]; gb=oof[(oof.base_seed.eq(seed))&(oof.arm.eq("B"))]
+        k=["case_id","series_id","frame_index"]; q=ga.merge(gb,on=k,suffixes=("_A","_B")); d=np.hypot(q.candidate_x_A-q.candidate_x_B,q.candidate_y_A-q.candidate_y_B)
+        dist.append({"base_seed":seed,"mean":d.mean(),"median":np.median(d),"p95":np.percentile(d,95),"max":d.max()})
+    ab=pd.DataFrame(ab); ab.to_csv(out/"armA_vs_armB_by_seed.csv",index=False); pd.DataFrame(dist).to_csv(out/"armA_vs_armB_prediction_distance.csv",index=False)
+    # manifests
+    oof[["base_seed","fold","held_case","arm"]].drop_duplicates().to_csv(out/"oof_run_manifest.csv",index=False)
+    val[["base_seed","arm"]].drop_duplicates().to_csv(out/"final_model_manifest.csv",index=False)
+    # figures
+    fig=out/"figures"; fig.mkdir(exist_ok=True)
+    piv=rm[(rm.split.eq("OOF"))&(rm.alpha.eq(.75))].pivot(index="base_seed",columns="arm",values="case_macro_mean")
+    piv.plot(marker="o"); plt.ylabel("Case-macro mean error (px)"); plt.title("OOF macro error by seed"); savefig(fig/"oof_macro_by_seed.png")
+    plt.axhline(0,color="black",lw=.8); plt.plot(td.base_seed.astype(str),td.temporal_delta_C_minus_B,marker="o"); plt.ylabel("Temporal - Control (px)"); plt.title("Temporal delta by seed"); savefig(fig/"temporal_delta_by_seed.png")
+    hm=mat.pivot(index="case_id",columns="base_seed",values="temporal_minus_control"); plt.figure(figsize=(8,5)); im=plt.imshow(hm,aspect="auto",cmap="coolwarm",vmin=-max(abs(hm.to_numpy().min()),abs(hm.to_numpy().max())),vmax=max(abs(hm.to_numpy().min()),abs(hm.to_numpy().max()))); plt.colorbar(im,label="Temporal - Control (px)"); plt.xticks(range(len(hm.columns)),hm.columns,rotation=30); plt.yticks(range(len(hm.index)),hm.index); plt.title("Case × seed temporal delta"); savefig(fig/"temporal_case_seed_heatmap.png")
+    summary=piv.agg(["mean","std","min","max"]).T; summary["range"]=summary["max"]-summary["min"]
+    summary[["mean","std"]].plot(kind="bar",yerr="std",legend=False); plt.ylabel("OOF macro error (px)"); plt.title("Seed variance by arm"); savefig(fig/"seed_variance_A_B_C.png")
+    for frame,name,col in [(sf[sf.split.eq("OOF")],"easy_case_safety_by_seed.png","harmful_gt10"),(hd[hd.split.eq("OOF")],"hard_case_rescue_by_seed.png","mean_gain"),(ps[ps.split.eq("OOF")],"persistent_harmful_by_seed.png","persistent_frames_ge3")]:
+        p=frame.pivot_table(index="base_seed",columns="arm",values=col,aggfunc="mean"); p.plot(marker="o"); plt.ylabel(col); plt.title(name.replace("_"," ").replace(".png","")); savefig(fig/name)
+    ab.set_index("base_seed")[["A_macro","B_macro"]].plot(marker="o"); plt.ylabel("OOF macro error (px)"); plt.title("Arm A vs B"); savefig(fig/"A_vs_B_by_seed.png")
+    valrm[valrm.alpha.eq(.75)].pivot(index="base_seed",columns="arm",values="mean").plot(marker="o"); plt.ylabel("Val mean error (px)"); plt.title("Val mean by seed"); savefig(fig/"val_mean_by_seed.png")
+    plt.axhline(0,color="black",lw=.8); plt.scatter(dr.oof_delta,dr.val_delta); [plt.text(r.oof_delta,r.val_delta,str(r.base_seed),fontsize=8) for r in dr.itertuples()]; plt.xlabel("OOF C-B (px)"); plt.ylabel("Val C-B (px)"); plt.title("OOF vs Val temporal delta"); savefig(fig/"oof_vs_val_temporal_delta.png")
+    cf.pivot_table(index="base_seed",columns=["split","arm"],values="margin_mean").plot(marker="o"); plt.ylabel("Mean margin"); plt.title("Confidence by seed"); savefig(fig/"confidence_by_seed.png")
+    if len(logs):
+        logs.pivot_table(index="epoch",columns=["arm","base_seed"],values="train_loss").plot(legend=False,alpha=.7); plt.ylabel("Train loss"); plt.title("Training loss by seed"); savefig(fig/"training_loss_by_seed.png")
+    # frozen decisions
+    delta=td.temporal_delta_C_minus_B; oof_wins=int((delta<0).sum())
+    pb=ps[(ps.split.eq("OOF"))&(ps.arm.eq("B"))].set_index("base_seed"); pc=ps[(ps.split.eq("OOF"))&(ps.arm.eq("C"))].set_index("base_seed")
+    persistent_better=int((pc.persistent_frames_ge3<pb.persistent_frames_ge3).sum())
+    severe_val_reverse=int((vd.temporal_delta_C_minus_B>0).sum())
+    if oof_wins>=4 and delta.mean()<0 and persistent_better>=3 and severe_val_reverse<4: decision=1
+    elif oof_wins<=2: decision=3
+    else: decision=2
+    abd=ab.sample_set_delta_B_minus_A
+    if (abd>0).sum()>=4: ab_dec="A"
+    elif (abd<0).sum()>=4: ab_dec="C"
+    else: ab_dec="B"
+    # OOF/Val rank association
+    rank_corr={}
+    for arm in arms:
+        x=rm[(rm.split.eq("OOF"))&(rm.alpha.eq(.75))&(rm.arm.eq(arm))].sort_values("base_seed").case_macro_mean.reset_index(drop=True)
+        y=rm[(rm.split.eq("Val"))&(rm.alpha.eq(.75))&(rm.arm.eq(arm))].sort_values("base_seed")["mean"].reset_index(drop=True)
+        rank_corr[arm]=float(x.rank().corr(y.rank(),method="pearson"))
+    final={"decision":decision,"decision_text":{1:"Temporal effect reasonably stable",2:"Temporal signal exists but training variance is comparable",3:"No reliable repeat-seed temporal advantage"}[decision],
+           "oof_temporal_wins_seeds":oof_wins,"oof_temporal_losses_seeds":5-oof_wins,"mean_temporal_improvement_px":float(-delta.mean()),
+           "std_B_macro_px":float(piv.B.std(ddof=1)),"std_C_macro_px":float(piv.C.std(ddof=1)),"persistent_temporal_better_seeds":persistent_better,
+           "val_temporal_wins_seeds":int((vd.temporal_delta_C_minus_B<0).sum()),"oof_win_val_lose_count":int(((dr.oof_direction=="win")&(dr.val_direction=="lose")).sum()),
+           "armA_vs_B_decision":ab_dec,"sample_set_delta_mean_px":float(abd.mean()),"seed_rank_spearman":rank_corr,"test_used":False}
+    (out/"final_decision.json").write_text(json.dumps(final,indent=2,ensure_ascii=False),encoding="utf-8")
+    # README
+    casewins=mat.assign(win=mat.temporal_minus_control<0).groupby("case_id").win.sum().sort_values(ascending=False)
+    val_summary=valrm[valrm.alpha.eq(.75)].groupby("arm")["mean"].agg(["mean","std","min","max"])
+    readme=f"""# Phase 7D — Repeat-Seed Training Stability Audit\n\nTraining completed for all five prespecified seeds. No Test data, seed selection, ensembling, or tuning was used.\n\n## Plain-language conclusions\n\n- Single-frame CONTROL OOF case-macro error across seeds: mean {piv.B.mean():.3f} px, SD {piv.B.std(ddof=1):.3f} px, range {(piv.B.max()-piv.B.min()):.3f} px.\n- ARM A vs B mean `B-A` delta: {abd.mean():.3f} px. Independent A/B conclusion: {ab_dec}.\n- TEMPORAL beat matched CONTROL in {oof_wins}/5 OOF repeats. Mean temporal improvement was {-delta.mean():.3f} px.\n- TEMPORAL reduced persistent harmful frames in {persistent_better}/5 seeds.\n- On matched Val, TEMPORAL won {int((vd.temporal_delta_C_minus_B<0).sum())}/5 repeats; OOF-win/Val-loss occurred {int(((dr.oof_direction=='win')&(dr.val_direction=='lose')).sum())} times.\n- Frozen primary decision: **Decision {decision} — {final['decision_text']}**.\n\n## Case consistency\n\nTemporal OOF wins by case across five seeds:\n\n{casewins.to_string()}\n\n## Val across-seed alpha=.75 mean error\n\n{val_summary.to_string()}\n\n## Design\n\nFive fixed base seeds were run. Each OOF fold used `effective_seed = base_seed + one_based_fold_index`, matching the historical Phase 7B convention. ARM A trained on all 2,784 frames; ARM B and C trained on the same 2,760 legal targets. All OOF and Val evaluation used the same legal target frames. Each model used ImageNet-pretrained HRNet-W18-small-v2, three fixed epochs, weighted MSE, integer argmax, and frozen alpha=.75.\n\nHistorical reuse was allowed only after config and epoch checks; details are in `reused_model_audit.csv`.\n"""
+    (out/"README.md").write_text(readme,encoding="utf-8")
+    log(f"[Decision] {final['decision_text']}; OOF temporal wins={oof_wins}/5; Val wins={final['val_temporal_wins_seeds']}/5")
+
+
+def main():
+    global CFG, GLOBAL_HASH, PH6G, PH7B, P5
+    ap=argparse.ArgumentParser(); ap.add_argument("--config",required=True); args=ap.parse_args()
+    CFG=json.loads((ROOT/args.config).read_text(encoding="utf-8")); GLOBAL_HASH=canonical_hash(CFG)
+    out=ROOT/CFG["output_dir"]; out.mkdir(parents=True,exist_ok=True); (out/"figures").mkdir(exist_ok=True)
+    log=Logger(out/"phase7d_run.log"); PH6G=ROOT/CFG["phase6g_dir"]; PH7B=ROOT/CFG["phase7b_dir"]
+    P5=P7B.load_p5(ROOT); device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device.type!="cuda": raise RuntimeError("CUDA required")
+    log("="*52); log("Phase 7D — REPEAT-SEED STABILITY"); log("="*52)
+    log("Seeds: "+", ".join(map(str,CFG["seeds"]))); log("ARM A: single-frame / 2784 Train"); log("ARM B: single-frame / 2760 Train"); log("ARM C: 3-frame temporal / 2760 Train"); log("Epochs: 3 fixed | Alpha: 0.75 fixed | Test: FORBIDDEN")
+    log(f"GPU: {torch.cuda.get_device_name(0)} | PyTorch {torch.__version__} | CUDA {torch.version.cuda}")
+    d=pd.read_csv(ROOT/CFG["manifest"]); d["case_code"]=d.case_code.astype(str)
+    w=P7B.build_windows(d); wt=w[w.split.eq("train")].reset_index(drop=True); wv=w[w.split.eq("val")].reset_index(drop=True)
+    ft=full_rows(d,"train"); fv=full_rows(d,"val")
+    assert len(ft)==2784 and len(wt)==2760 and len(wv)==920
+    assert not set(d[d.split.eq("train")].case_code)&set(d[d.split.eq("val")].case_code)
+    cache=out/"cache"; cache.mkdir(exist_ok=True)
+    build_full_cache(ft,wt,PH7B/"cache/train_stacks.npy",cache/"train_full_single.npy",log)
+    dsA=FullDataset(ft,cache/"train_full_single.npy",2.0)
+    dsB=P7B.WindowDataset(wt,str(PH7B/"cache/train_stacks.npy"),"control",2.0)
+    dsC=P7B.WindowDataset(wt,str(PH7B/"cache/train_stacks.npy"),"temporal",2.0)
+    dvB=P7B.WindowDataset(wv,str(PH7B/"cache/val_stacks.npy"),"control",2.0)
+    dvC=P7B.WindowDataset(wv,str(PH7B/"cache/val_stacks.npy"),"temporal",2.0)
+    cases=sorted(wt.case_id.astype(str).unique().tolist()); total=135; counter=0
+    oof_parts=[]; val_parts=[]; log_parts=[]; reuse_rows=[]; random_rows=[]
+    (out/"config.json").write_text(json.dumps(CFG,indent=2),encoding="utf-8")
+    for base_seed in CFG["seeds"]:
+        for fold,held in enumerate(cases,1):
+            eff=base_seed+fold
+            for arm,ds in [("A",dsA),("B",dsB),("C",dsC)]:
+                counter+=1; log(f"[{counter}/{total}] seed {base_seed} fold {fold}/8 held {held} ARM {arm}")
+                if arm=="A": train_idx=np.where(ds.w.case_id.astype(str).ne(held))[0]; held_idx=np.where((ds.w.case_id.astype(str).eq(held))&(ds.w.frame_index.astype(int).ge(2)))[0]
+                else: train_idx=np.where(ds.w.case_id.astype(str).ne(held))[0]; held_idx=np.where(ds.w.case_id.astype(str).eq(held))[0]
+                source=historical_oof_source(arm,fold,held,base_seed)
+                rdir=out/f"oof/seed_{base_seed}/fold_{fold}_{held}/arm_{arm}"
+                pred,tl=infer_or_reuse(rdir,arm,base_seed,eff,fold,held,None,ds,{"train":train_idx,"held":held_idx},device,log,source)
+                # Historical Phase 6G Arm-A OOF tables include every frame, while
+                # Phase 7D compares all arms only on legal temporal targets
+                # (frame_index >= 2 within each Series).  Apply the frozen held-out
+                # key set after reuse as well as after fresh inference.
+                if len(pred)!=len(held_idx):
+                    keys=ds.w.iloc[held_idx][["case_id","series_id","frame_index"]].copy()
+                    for col in ["case_id","series_id"]:
+                        keys[col]=keys[col].astype(str)
+                        pred[col]=pred[col].astype(str)
+                    keys["frame_index"]=keys["frame_index"].astype(int)
+                    pred["frame_index"]=pred["frame_index"].astype(int)
+                    pred=pred.merge(keys,on=["case_id","series_id","frame_index"],how="inner")
+                    if len(pred)!=len(held_idx):
+                        raise RuntimeError(f"Matched OOF count {len(pred)} != {len(held_idx)} for seed={base_seed} fold={fold} arm={arm}")
+                    pred.to_csv(rdir/"predictions.csv",index=False)
+                oof_parts.append(add_ids(pred,arm,base_seed,fold,held)); tl=tl.copy(); tl["arm"]=arm; tl["base_seed"]=base_seed; tl["fold"]=fold; tl["held_case"]=held; log_parts.append(tl)
+                reuse_rows.append({"scope":"OOF","arm":arm,"base_seed":base_seed,"effective_seed":eff,"fold":fold,"held_case":held,"reused":bool(source),"source":str(source["checkpoint"]) if source else "fresh","reason":source["reason"] if source else "No exact historical match"})
+                random_rows.append({"scope":"OOF","arm":arm,"base_seed":base_seed,"effective_seed":eff,"fold":fold,"python_seed":eff,"numpy_seed":eff,"torch_seed":eff,"cuda_seed":eff,"dataloader_seed":eff,"shuffle":True,"cudnn_deterministic":True,"cudnn_benchmark":False,"deterministic_algorithms":"warn_only","gpu":torch.cuda.get_device_name(0),"torch":torch.__version__,"cuda":torch.version.cuda})
+    # full train/final Val
+    for base_seed in CFG["seeds"]:
+        for arm,dtrain,dval in [("A",dsA,dvB),("B",dsB,dvB),("C",dsC,dvC)]:
+            counter+=1; log(f"[{counter}/{total}] seed {base_seed} FINAL ARM {arm}")
+            source=historical_final_source(arm,base_seed); rdir=out/f"final/seed_{base_seed}/arm_{arm}"
+            pred,tl=run_final(rdir,arm,base_seed,dtrain,dval,np.arange(len(dtrain)),np.arange(len(dval)),device,log,source)
+            # Historical A contains 928 rows; strictly subset legal 920.
+            if arm=="A" and len(pred)!=920:
+                keys=wv[["case_id","series_id","frame_index"]].copy(); keys.frame_index=keys.frame_index.astype(int)
+                # CSV inference can coerce numeric-looking identifiers (for example
+                # case 13424) to int while the frozen manifest keeps identifiers as
+                # strings.  Identifiers are categorical keys, so normalize both
+                # sides explicitly before the matched-frame merge.
+                for col in ["case_id","series_id"]:
+                    keys[col]=keys[col].astype(str)
+                    pred[col]=pred[col].astype(str)
+                pred.frame_index=pred.frame_index.astype(int); pred=pred.merge(keys,on=["case_id","series_id","frame_index"],how="inner")
+                if len(pred)!=920: raise RuntimeError(f"Historical A matched Val count {len(pred)} != 920")
+                pred.to_csv(rdir/"predictions.csv",index=False)
+            val_parts.append(add_ids(pred,arm,base_seed,0,"VAL")); tl=tl.copy(); tl["arm"]=arm; tl["base_seed"]=base_seed; tl["fold"]=0; tl["held_case"]="VAL"; log_parts.append(tl)
+            reuse_rows.append({"scope":"Final","arm":arm,"base_seed":base_seed,"effective_seed":base_seed,"fold":0,"held_case":"VAL","reused":bool(source),"source":str(source["checkpoint"]) if source else "fresh","reason":source["reason"] if source else "No exact historical match"})
+            random_rows.append({"scope":"Final","arm":arm,"base_seed":base_seed,"effective_seed":base_seed,"fold":0,"python_seed":base_seed,"numpy_seed":base_seed,"torch_seed":base_seed,"cuda_seed":base_seed,"dataloader_seed":base_seed,"shuffle":True,"cudnn_deterministic":True,"cudnn_benchmark":False,"deterministic_algorithms":"warn_only","gpu":torch.cuda.get_device_name(0),"torch":torch.__version__,"cuda":torch.version.cuda})
+    oof=pd.concat(oof_parts,ignore_index=True); val=pd.concat(val_parts,ignore_index=True); logs=pd.concat(log_parts,ignore_index=True)
+    if len(oof)!=2760*5*3 or len(val)!=920*5*3: raise RuntimeError(f"Prediction count mismatch OOF={len(oof)} Val={len(val)}")
+    analyze(out,oof,val,logs,reuse_rows,random_rows,log)
+    (out/"run_status.json").write_text(json.dumps({"status":"complete","models_total":135,"oof_rows":len(oof),"val_rows":len(val),"test_used":False},indent=2),encoding="utf-8")
+    log("[Done] Phase 7D complete. Training stopped; no next-phase experiment started.")
+
+
+if __name__ == "__main__":
+    main()

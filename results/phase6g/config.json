@@ -1,0 +1,47 @@
+{
+  "seed": 20260918,
+  "manifest": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/model_clean_v1/model_clean_frames.csv",
+  "phase6b_config": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/phase6b_local_refinement_256_baseline/config.json",
+  "phase6f_val_predictions": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/phase6f_residual_regression_oof/val_predictions.csv",
+  "output_dir": "C:/Users/Walter/Documents/Codex/2026-09-18/files-pasted-by-the-user-xa/outputs/phase6g_oof_shrinkage_refinement",
+  "alpha_candidates": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "selection_metric": "case_macro_mean_error_px",
+  "tie_break": "smaller_alpha",
+  "batch_size": 16,
+  "num_workers": 0,
+  "max_epochs": 120,
+  "early_stopping_patience": 15,
+  "early_stopping_min_delta_px": 0.1,
+  "peak_suppression_radius": 6,
+  "raw_bins": [
+    [
+      0,
+      5
+    ],
+    [
+      5,
+      10
+    ],
+    [
+      20,
+      40
+    ],
+    [
+      40,
+      60
+    ]
+  ],
+  "forbidden": {
+    "val_for_alpha_selection": true,
+    "adaptive_alpha": true,
+    "temporal": true,
+    "test": true,
+    "old_tip_checkpoints": true
+  }
+}

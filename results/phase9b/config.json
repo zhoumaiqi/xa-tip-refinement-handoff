@@ -1,0 +1,45 @@
+{
+  "output_dir": "outputs/phase9b_extended_train_singleframe",
+  "phase9a_dir": "outputs/phase9a_extended_dataset_eligibility_audit",
+  "phase7d_dir": "outputs/phase7d_repeat_seed_stability",
+  "phase7b_dir": "outputs/phase7b_causal_3frame_hrnet",
+  "model_clean_manifest": "outputs/model_clean_v1/model_clean_frames.csv",
+  "candidate_cases": [
+    "14-cbct",
+    "2768",
+    "4274",
+    "658",
+    "771",
+    "908"
+  ],
+  "frozen_val_cases": [
+    "13424",
+    "2148",
+    "6700"
+  ],
+  "hash_prefix": "phase9b|20260924|",
+  "seeds": [
+    20260918,
+    20260919,
+    20260920,
+    20260921,
+    20260922
+  ],
+  "roi_size": 256,
+  "heatmap_size": 64,
+  "sigma": 2.0,
+  "alpha": 0.75,
+  "epochs": 3,
+  "batch_size": 16,
+  "num_workers": 0,
+  "optimizer": "Adam",
+  "learning_rate": 0.001,
+  "weight_decay": 0.0,
+  "scheduler": "MultiStepLR milestones [120,160], gamma 0.2 (inactive within 3 epochs)",
+  "loss": "mean((1 + 9*GT) * (Pred-GT)^2)",
+  "backbone": "hrnet_w18_small_v2.gluon_in1k",
+  "pretrained": true,
+  "augmentation": "none",
+  "temporal": false,
+  "test_used": false
+}

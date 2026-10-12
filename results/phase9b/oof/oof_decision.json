@@ -1,0 +1,17 @@
+{
+  "decision": "OOF-C",
+  "baseline_case_macro_mean_5seed": 17.044498091126513,
+  "extended_case_macro_mean_5seed": 17.40939210694335,
+  "mean_delta_extended_minus_baseline_px": 0.36489401581683933,
+  "extended_seed_wins": 1,
+  "extended_seed_losses": 4,
+  "baseline_macro_sd": 0.4114251966655541,
+  "extended_macro_sd": 0.6132395083211849,
+  "baseline_p95_mean": 50.670618531087605,
+  "extended_p95_mean": 49.73066878321281,
+  "baseline_harmful_gt10_mean": 0.0639855072463768,
+  "extended_harmful_gt10_mean": 0.041086956521739125,
+  "frozen_before_val": true,
+  "split_hash": "db0944eb9c26ce0a310edae029fff9dcfb507cac7bf4cac9c127dfbbff85844e",
+  "test_used": false
+}

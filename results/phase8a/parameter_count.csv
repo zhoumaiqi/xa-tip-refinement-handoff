@@ -1,0 +1,4 @@
+model,backbone,fusion,head,total
+Phase6G single HRNet,3860720,0,19,3860739
+Phase7B channel stack,3860720,0,19,3860739
+Phase8A shared feature fusion,3860720,990,19,3861729

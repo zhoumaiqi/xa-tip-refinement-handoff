@@ -1,0 +1,7 @@
+ONE shared backbone verified: True
+Backbone object IDs for t-2,t-1,t references: [1761855914064, 1761855914064, 1761855914064]
+No backbone_t2/backbone_t1/backbone_t attributes: True
+State dict backbone key count: 864
+Feature extraction point: backbone.stages output branch[0]
+Feature tensor: [B,18,64,64]
+Fusion: concat [B,54,64,64] -> Conv1x1(54,18) -> ReLU

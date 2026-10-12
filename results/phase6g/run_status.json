@@ -1,0 +1,13 @@
+{
+  "status": "complete_after_report_recovery",
+  "alpha_frozen_before_val": 0.75,
+  "final_epochs_frozen_before_val": 3,
+  "oof_frames": 2784,
+  "val_frames_one_shot": 928,
+  "val_rerun_during_recovery": false,
+  "test_used": false,
+  "notes": [
+    "Fold-2 saved checkpoint inference recovered with local Subset sample reindexing; no retraining.",
+    "Plot/report process recovered from saved results after duplicate OpenMP runtime termination."
+  ]
+}

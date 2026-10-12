@@ -1,0 +1,28 @@
+{
+  "config_hash": "0952eba4eddaeba40c1013a052c696f65a948324ac9ccc1889ae0a7df619f093",
+  "split_hash": "db0944eb9c26ce0a310edae029fff9dcfb507cac7bf4cac9c127dfbbff85844e",
+  "seed": 20260922,
+  "fold": 0,
+  "held_case": "VAL",
+  "scope": "FINAL",
+  "effective_seed": 20260922,
+  "train_cases": [
+    "131",
+    "14-cbct",
+    "15716",
+    "20260706004",
+    "202607130347",
+    "2768",
+    "361",
+    "4274",
+    "4904",
+    "658",
+    "6702",
+    "9950"
+  ],
+  "train_frames": 4113,
+  "prediction_frames": 920,
+  "epochs": 3,
+  "complete": true,
+  "finished_at": "2026-09-24 16:02:49"
+}

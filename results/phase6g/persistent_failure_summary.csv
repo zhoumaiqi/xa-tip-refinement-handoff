@@ -1,0 +1,4 @@
+method,harmful_gt10_frames,isolated_or_short_frames,persistent_ge3_frames,segments_ge3,segments_ge5,segments_ge10,max_segment_length
+Phase6B,148,49,99,16,9,3,18
+Phase6F,27,3,24,3,1,1,17
+Phase6G,79,39,40,10,3,0,7

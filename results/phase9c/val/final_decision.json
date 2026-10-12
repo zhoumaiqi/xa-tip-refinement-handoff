@@ -1,0 +1,52 @@
+{
+  "oof_decision": "A_RECALIBRATION_USEFUL",
+  "baseline_selected_alpha": 0.5,
+  "extended_selected_alpha": 0.5,
+  "baseline_val_historical075": {
+    "alpha": 0.75,
+    "mean": 21.45617878511635,
+    "mean_sd": 1.9347868717766168,
+    "median": 14.323097515375121,
+    "p95": 49.547956662285706,
+    "p99": 54.8037216726176,
+    "harmful_gt5": 0.2965217391304348,
+    "harmful_gt10": 0.11456521739130436,
+    "harmful_gt20": 0.033913043478260865
+  },
+  "baseline_val_selected": {
+    "alpha": 0.5,
+    "mean": 21.437330716626665,
+    "mean_sd": 1.2432136165451513,
+    "median": 16.16939092199474,
+    "p95": 47.46379640425731,
+    "p99": 51.10645998895002,
+    "harmful_gt5": 0.17217391304347823,
+    "harmful_gt10": 0.04826086956521739,
+    "harmful_gt20": 0.015652173913043476
+  },
+  "extended_val_historical075": {
+    "alpha": 0.75,
+    "mean": 21.257176718643183,
+    "mean_sd": 0.5903845107907985,
+    "median": 14.479757844541874,
+    "p95": 47.85309335078267,
+    "p99": 53.215548964137625,
+    "harmful_gt5": 0.2597826086956522,
+    "harmful_gt10": 0.07043478260869565,
+    "harmful_gt20": 0.014130434782608697
+  },
+  "extended_val_selected": {
+    "alpha": 0.5,
+    "mean": 21.31521457454419,
+    "mean_sd": 0.48329427488216053,
+    "median": 16.79715259315862,
+    "p95": 46.21383311236485,
+    "p99": 49.831433922930565,
+    "harmful_gt5": 0.14152173913043478,
+    "harmful_gt10": 0.02152173913043478,
+    "harmful_gt20": 0.0028260869565217396
+  },
+  "test_used": false,
+  "final_choice": 2,
+  "interpretation": "Recalibration changes the safety/rescue trade-off but does not solve generalization."
+}

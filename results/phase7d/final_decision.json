@@ -1,0 +1,20 @@
+{
+  "decision": 2,
+  "decision_text": "Temporal signal exists but training variance is comparable",
+  "oof_temporal_wins_seeds": 5,
+  "oof_temporal_losses_seeds": 0,
+  "mean_temporal_improvement_px": 2.033866576684515,
+  "std_B_macro_px": 0.8430513553890829,
+  "std_C_macro_px": 0.4930980173115579,
+  "persistent_temporal_better_seeds": 3,
+  "val_temporal_wins_seeds": 1,
+  "oof_win_val_lose_count": 4,
+  "armA_vs_B_decision": "A",
+  "sample_set_delta_mean_px": 1.0228477913561114,
+  "seed_rank_spearman": {
+    "A": 0.6,
+    "B": 0.3,
+    "C": 0.39999999999999997
+  },
+  "test_used": false
+}

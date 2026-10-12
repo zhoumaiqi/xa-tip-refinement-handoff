@@ -1,0 +1,12 @@
+{
+  "output_dir": "outputs/phase7c_temporal_domain_shift_audit",
+  "phase7a_dir": "outputs/phase7a_causal_multiframe_crop_audit",
+  "phase7b_dir": "outputs/phase7b_causal_3frame_hrnet",
+  "phase6g_dir": "outputs/phase6g_oof_shrinkage_refinement",
+  "manifest": "outputs/model_clean_v1/model_clean_frames.csv",
+  "roi_size": 256,
+  "training": false,
+  "test_used": false,
+  "ssim": false,
+  "edge_gradient_threshold": 0.05
+}

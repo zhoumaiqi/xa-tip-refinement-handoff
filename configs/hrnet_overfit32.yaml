@@ -1,0 +1,47 @@
+project:
+  train_manifest: outputs/model_clean_v1/model_clean_frames.csv
+  output_dir: outputs/hrnet_phase3
+
+experiment:
+  seed: 20260918
+  split: train
+  subset_size: 32
+  expected_train_cases: 8
+  expected_train_series: 12
+  expected_train_frames: 2784
+
+data:
+  preprocessing: minmax
+  original_size: [1024, 1024]
+  input_size: [512, 512]
+  heatmap_size: [128, 128]
+  sigma: 2.0
+  grayscale_channels: 3
+  batch_size: 16
+  num_workers: 0
+  preload_images: true
+
+model:
+  implementation: timm
+  variant: hrnet_w18_small_v2
+  pretrained: false
+  output_channels: 1
+
+training:
+  epochs: 180
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.0
+  loss: MSELoss
+  scheduler: MultiStepLR
+  scheduler_milestones: [120, 160]
+  scheduler_gamma: 0.2
+  deterministic: true
+  cudnn_benchmark: false
+  progression_epochs: [0, 10, 90, 180]
+
+visualization:
+  progression_samples: 4
+  final_overlay_samples: 16
+  heatmap_pair_samples: 8
+

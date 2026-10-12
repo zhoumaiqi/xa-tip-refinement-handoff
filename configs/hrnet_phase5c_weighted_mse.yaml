@@ -1,0 +1,87 @@
+project:
+  manifest: outputs/model_clean_v1/model_clean_frames.csv
+  output_dir: outputs/hrnet_phase5c_weighted_mse
+  phase5a_baseline_dir: outputs/hrnet_phase5a_pretrained
+
+experiment:
+  seed: 20260918
+  expected_train_frames: 2784
+  expected_train_cases: 8
+  expected_train_series: 12
+  expected_val_frames: 928
+  expected_val_cases: 3
+  expected_val_series: 4
+  expected_val_case_codes: ["13424", "2148", "6700"]
+
+data:
+  preprocessing: minmax
+  original_size: [1024, 1024]
+  input_size: [512, 512]
+  heatmap_size: [128, 128]
+  sigma: 2.0
+  grayscale_channels: 3
+  batch_size: 16
+  num_workers: 0
+  preload_images: true
+  train_shuffle: true
+  val_shuffle: false
+  augmentation: none
+  imagenet_mean_std_normalization: false
+
+model:
+  implementation: timm
+  variant: hrnet_w18_small_v2
+  pretrained: true
+  pretrained_tag: gluon_in1k
+  pretrained_hf_hub_id: timm/hrnet_w18_small_v2.gluon_in1k
+  output_channels: 1
+  initialization: pretrained_backbone_fresh_heatmap_head
+  forbidden_initializations:
+    - outputs/hrnet_phase3/best_overfit_checkpoint.pth
+    - outputs/hrnet_phase4_baseline/checkpoints/best_by_val_mean_error.pth
+    - outputs/hrnet_phase5a_pretrained/checkpoints/best_by_val_mean_error.pth
+    - outputs/hrnet_phase5b_translation/checkpoints/best_by_val_mean_error.pth
+
+training:
+  max_epochs: 120
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.0
+  loss: heatmap_weighted_mse
+  scheduler: MultiStepLR
+  scheduler_milestones: [120, 160]
+  scheduler_gamma: 0.2
+  deterministic: true
+  cudnn_benchmark: false
+  early_stopping:
+    monitor: val_mean_error_px
+    patience: 15
+    min_delta_px: 0.1
+  collapse_monitor:
+    max_mean_below: 0.05
+    heatmap_std_below: 0.01
+    patience_epochs: 3
+  gradient_explosion_norm: 10000.0
+
+weighted_loss:
+  equation: mean((1 + alpha * GT) * (Pred - GT)^2)
+  alpha: 9.0
+  normalize_weight_to_mean_one: false
+  foreground_diagnostic_threshold: 0.1
+  prediction_abs_safety_stop: 10.0
+
+heatmap_confidence:
+  independent_peak_suppression_radius: 6
+  entropy_definition: softmax_spatial_normalized_by_log_pixel_count
+
+checkpointing:
+  primary: best_by_val_mean_error.pth
+  save_best_by_val_median: true
+  save_last: true
+
+visualization:
+  samples_per_category: 12
+  failure_best_count: 20
+  failure_median_count: 20
+  failure_worst_count: 40
+  worst_count: 20

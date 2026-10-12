@@ -1,0 +1,55 @@
+{
+  "project": {
+    "manifest": "outputs/model_clean_v1/model_clean_frames.csv",
+    "phase6b_dir": "outputs/phase6b_local_refinement_256_baseline",
+    "output_dir": "outputs/phase6f_residual_regression_oof"
+  },
+  "experiment": {
+    "seed": 20260918,
+    "expected_train_frames": 2784,
+    "expected_train_cases": 8,
+    "expected_val_frames": 928,
+    "expected_val_cases": 3
+  },
+  "data": {
+    "roi_size": 256,
+    "roi_center": "raw_exact",
+    "preprocessing": "per_frame_minmax",
+    "channels": 3,
+    "batch_size": 16,
+    "num_workers": 0,
+    "preload_float16": true,
+    "augmentation": "none"
+  },
+  "model": {
+    "variant": "hrnet_w18_small_v2",
+    "pretrained": true,
+    "backbone_output": "classification_high_level_global_average_pool",
+    "head": "Linear(2048,256)-ReLU-Linear(256,2)",
+    "residual_bound_px": 128.0,
+    "initialization": "fresh_ImageNet_backbone_and_fresh_regression_head_per_fold"
+  },
+  "training": {
+    "loss": "SmoothL1Loss",
+    "smooth_l1_beta_px": 5.0,
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "scheduler": "MultiStepLR",
+    "scheduler_milestones": [120, 160],
+    "scheduler_gamma": 0.2,
+    "max_epochs": 120,
+    "early_stopping_patience": 15,
+    "early_stopping_min_delta_px": 0.1,
+    "gradient_explosion_norm": 10000.0,
+    "final_epoch_rule": "round_half_up(median of 8 fold best epochs)"
+  },
+  "constraints": {
+    "real_val_for_tuning": false,
+    "final_val_inference_runs": 1,
+    "temporal_input": false,
+    "jitter": false,
+    "image_noise": false,
+    "phase6b_or_phase6c_checkpoint_loaded": false
+  }
+}

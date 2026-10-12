@@ -1,0 +1,15 @@
+{
+  "test_cases_reserved": [
+    "908",
+    "771"
+  ],
+  "series_count": 5,
+  "frame_count": 1668,
+  "training_reads": 0,
+  "inference_reads": 0,
+  "metric_reads": 0,
+  "pixel_reads": 0,
+  "gt_reads": 0,
+  "test_used": false,
+  "identity_metadata_used_for_leakage_audit_only": true
+}

@@ -1,0 +1,24 @@
+{
+  "status": "complete",
+  "oof_models_trained": 40,
+  "final_models_trained": 5,
+  "oof_rows_extended": 13800,
+  "val_rows_extended": 4600,
+  "extended_train": {
+    "cases": 12,
+    "series": 17,
+    "frames": 4113
+  },
+  "final_test": {
+    "cases": [
+      "908",
+      "771"
+    ],
+    "status": "RESERVED_NOT_USED"
+  },
+  "test_used": false,
+  "training_reads_test": 0,
+  "inference_reads_test": 0,
+  "metric_reads_test": 0,
+  "split_hash": "db0944eb9c26ce0a310edae029fff9dcfb507cac7bf4cac9c127dfbbff85844e"
+}

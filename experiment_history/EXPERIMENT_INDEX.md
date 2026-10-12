@@ -1,0 +1,24 @@
+# Experiment index
+
+- **Phase 3/4 — Full-frame HRNet baseline.** Verified that the network could fit Train, but held-out-case error was extremely large. Established the central Train–Val generalization gap.
+- **Phase 4.5 — Generalization diagnosis.** Quantified spatial/domain shift, heatmap confidence, sparse-MSE behavior, border predictions, and limited diversity. Evidence supported shortcuts and cross-case shift rather than a single code defect.
+- **Phase 5A — ImageNet pretraining.** Tested pretrained initialization as a single variable; it did not eliminate cross-case failure.
+- **Phase 5B — Translation augmentation.** Tested spatial augmentation in isolation; it was not a sufficient solution.
+- **Phase 5C — Weighted MSE.** Increased foreground emphasis. Helpful as a local-model training choice, but not sufficient for full-frame generalization.
+- **Phase 6A — Local-refinement audit.** Confirmed product semantics for raw and true tip. Showed raw-centered local crops were viable and motivated coarse-to-fine refinement.
+- **Phase 6B — 256 local baseline.** Built the first practical raw-centered local HRNet and demonstrated useful refinement with important easy-case over-correction.
+- **Phase 6C — Coordinate jitter.** Tested ±32 px jitter as a single variable; it was not selected as the main augmentation.
+- **Phase 6D — Safe-refinement audit.** Assessed observable confidence/safety signals without training a new localizer; no simple gate was reliable enough.
+- **Phase 6E — Causal temporal-consistency audit.** Characterized persistent harmful segments and showed that simple smoothing/Kalman logic would not solve wrong-track behavior.
+- **Phase 6F — Case-OOF residual regression.** Improved conservatism but corrections were too small to rescue difficult cases reliably.
+- **Phase 6G — Conservative heatmap shrinkage.** OOF selected fixed alpha .75, preserving visual rescue while reducing full-correction harm. This remains the engineering baseline.
+- **Phase 6H — Strict nested adaptive fusion.** Used leakage-safe nested case cross-fitting. Observable gate features did not consistently beat fixed alpha .75.
+- **Phase 7A — Causal multi-frame crop audit.** Confirmed legal windows, shared-current-raw crop geometry, 100% observed three-frame coverage, and no 256 padding issue.
+- **Phase 7B — Causal three-frame HRNet.** Direct channel stacking improved OOF strongly but failed independent Val, revealing unstable temporal generalization.
+- **Phase 7C — Temporal domain-shift audit.** Diagnosed OOF→Val reversal as multi-factor behavior including domain shift and training instability rather than a simple pipeline bug.
+- **Phase 7D — Repeat-seed stability.** Across five seeds, temporal stack won OOF 5/5 by about 2.034 px, yet won Val only 1/5. The OOF temporal signal was real but not dependable across cases.
+- **Phase 8A — Shared-backbone feature fusion.** Separate-frame shared HRNet plus concat/1×1 fusion failed Stage 1 (17.699 vs 17.627 px; 3/8 case wins), so Stage 2 was not run.
+- **Phase 8B — Explicit temporal differences.** Signed difference channels showed some OOF value but won independent Val 0/5; this representation was not promoted.
+- **Phase 9A/9A.5 — Extended-data and human review.** Rebuilt data eligibility, isolated conflicts, and generated visual review material. Six independent cases, 10 Series, and 2,997 annotated frames were accepted for controlled splitting.
+- **Phase 9B — Extended-Train single-frame baseline.** Deterministic hash assigned four cases to Train and two to sealed Test. Extended-12 improved safety/persistence but won primary old-case OOF only 1/5 seeds.
+- **Phase 9C — Fixed-alpha recalibration.** Saved-prediction audit selected alpha .50 for Extended-12. It improved OOF/tail safety but not frozen-Val mean, confirming a trade-off rather than a generalization fix.

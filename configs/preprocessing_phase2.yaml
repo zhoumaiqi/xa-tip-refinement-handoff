@@ -1,0 +1,47 @@
+project:
+  model_clean_frames: outputs/model_clean_v1/model_clean_frames.csv
+  cached_intensity_stats: outputs/model_clean_v1/intensity_frame_stats.csv
+  output_dir: outputs/preprocessing_phase2
+
+data:
+  split: train
+  expected_cases: 8
+  expected_series: 12
+  expected_frames: 2784
+  intensity_domain: stored
+  require_identity_rescale_for_stored_domain: true
+
+preprocessing:
+  methods:
+    - minmax
+    - p0_1_p99_9
+    - p0_5_p99_5
+    - p1_p99_5
+  saturation_tolerance: 1.0e-6
+  dicom_window:
+    evaluate_eligibility: true
+    minimum_present_fraction: 0.95
+    maximum_unique_pair_fraction: 0.25
+
+sampling:
+  seed: 20260918
+  frames_per_series: 10
+  montage_frames_per_series: 1
+  temporal_anchors: 5
+  brightness_anchors: 5
+
+roi:
+  tip_patch_size: 9
+  background_exclusion_size: 17
+  tip_roi_size: 64
+  gradient_roi_size: 33
+  montage_roi_size: 96
+
+heatmap:
+  preprocessing_method: minmax
+  original_size: [1024, 1024]
+  input_size: [512, 512]
+  heatmap_size: [128, 128]
+  sigma: 2.0
+  sanity_samples: 12
+

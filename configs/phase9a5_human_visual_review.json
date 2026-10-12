@@ -1,0 +1,10 @@
+{
+  "phase9a_output": "outputs/phase9a_extended_dataset_eligibility_audit",
+  "output_dir": "outputs/phase9a5_human_visual_review",
+  "candidate_cases": ["14-cbct", "2768", "4274", "658", "771", "908"],
+  "review_frames_per_series": 20,
+  "sampling_seed": 20260924,
+  "zoom_size": 256,
+  "temporal_strip_length": 7,
+  "suspicious_frames_per_series": 12
+}

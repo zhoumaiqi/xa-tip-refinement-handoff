@@ -1,0 +1,16 @@
+{
+  "stage1_pass": false,
+  "D_case_macro_mean": 17.626943756479147,
+  "E_case_macro_mean": 17.698544740234635,
+  "delta_E_minus_D": 0.07160098375548785,
+  "wins": 3,
+  "ties": 0,
+  "losses": 5,
+  "noninferior_cases": 3,
+  "D_harmful_gt10": 0.11920289855072463,
+  "E_harmful_gt10": 0.10615942028985507,
+  "harmful_gate_limit_abs_increase": 0.01,
+  "harmful_gate_pass": true,
+  "val_read": false,
+  "test_used": false
+}

@@ -1,0 +1,13 @@
+{
+  "data_root": "C:/Users/Walter/Desktop/TIP",
+  "historical_audit": "outputs/dataset_audit/audit_summary.csv",
+  "historical_csv_summary": "outputs/dataset_audit/csv_summary.csv",
+  "model_clean_series": "outputs/model_clean_v1/model_clean_series.csv",
+  "output_dir": "outputs/phase9a_extended_dataset_eligibility_audit",
+  "frozen_val_cases": ["13424", "2148", "6700"],
+  "temporal_outlier_px": 75.0,
+  "residual_shift_px": 50.0,
+  "qc_frames_per_series": 12,
+  "pixel_workers": 1,
+  "hash_algorithm": "sha256"
+}

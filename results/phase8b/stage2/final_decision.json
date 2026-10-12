@@ -1,0 +1,9 @@
+{
+  "decision": 2,
+  "decision_text": "Explicit differences have partial benefit but remain cross-case unstable",
+  "oof_G_wins": 3,
+  "oof_mean_improvement_px": -0.23464784847826153,
+  "val_G_wins": 0,
+  "oof_win_val_lose_count": 3,
+  "test_used": false
+}

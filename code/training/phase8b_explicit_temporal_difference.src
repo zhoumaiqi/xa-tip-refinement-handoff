@@ -1,0 +1,300 @@
+from __future__ import annotations
+import argparse, hashlib, importlib.util, importlib.machinery, json, math, random, time
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import torch
+from torch.utils.data import Dataset
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+
+ROOT=Path(__file__).resolve().parents[1]
+
+def load_source(name,path):
+    loader=importlib.machinery.SourceFileLoader(name,str(path)); spec=importlib.util.spec_from_loader(name,loader)
+    mod=importlib.util.module_from_spec(spec); loader.exec_module(mod); return mod
+
+class Logger:
+    def __init__(self,path): self.path=path; path.parent.mkdir(parents=True,exist_ok=True)
+    def __call__(self,msg):
+        print(str(msg),flush=True)
+        with self.path.open('a',encoding='utf-8') as f: f.write(str(msg)+'\n')
+
+def seed_all(seed):
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed); torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic=True; torch.backends.cudnn.benchmark=False
+    try: torch.use_deterministic_algorithms(True,warn_only=True)
+    except Exception: pass
+
+def tensor_hash(model):
+    h=hashlib.sha256()
+    for k,v in model.state_dict().items(): h.update(k.encode()); h.update(v.detach().cpu().numpy().tobytes())
+    return h.hexdigest()
+
+def canonical_hash(x): return hashlib.sha256(json.dumps(x,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
+class DifferenceDataset(Dataset):
+    def __init__(self,base,arm,scale): self.base=base; self.arm=arm; self.scale=float(scale); self.w=base.w; self.y=base.y
+    def __len__(self): return len(self.base)
+    def __getitem__(self,i):
+        x=np.asarray(self.base.x[i],dtype=np.float32); cur=x[2]
+        if self.arm=='F': inp=np.stack([cur,np.full_like(cur,.5),np.full_like(cur,.5)])
+        else:
+            d1=np.clip(.5+(cur-x[1])/(2*self.scale),0,1); d2=np.clip(.5+(x[1]-x[0])/(2*self.scale),0,1)
+            inp=np.stack([cur,d1,d2]).astype(np.float32)
+        return torch.from_numpy(inp.copy()),torch.from_numpy(np.asarray(self.base.y[i],dtype=np.float32)),int(i)
+
+def hist_quantile(hist,q,bins):
+    target=q/100.0*hist.sum(); cs=np.cumsum(hist); i=int(np.searchsorted(cs,target,side='left')); i=min(max(i,0),len(hist)-1)
+    before=cs[i-1] if i else 0; frac=0 if hist[i]==0 else (target-before)/hist[i]
+    return (i+frac)/bins
+
+def stats_from_hist(hist,bins,maxv):
+    return {'median':hist_quantile(hist,50,bins),'p90':hist_quantile(hist,90,bins),'p95':hist_quantile(hist,95,bins),'p99':hist_quantile(hist,99,bins),'p99_5':hist_quantile(hist,99.5,bins),'max':maxv,'n_pixels':int(hist.sum())}
+
+def stage0(base,cfg,out,log):
+    sdir=out/'stage0'; sdir.mkdir(parents=True,exist_ok=True); scale_file=sdir/'difference_scale.json'
+    if scale_file.exists() and (sdir/'difference_statistics.csv').exists() and (sdir/'difference_clipping.csv').exists() and (sdir/'difference_tip_vs_background.csv').exists() and (sdir/'difference_preview.png').exists():
+        z=json.loads(scale_file.read_text()); log(f"[Stage0 Resume] DIFF_SCALE={z['diff_scale']:.8f}"); return float(z['diff_scale'])
+    bins=int(cfg['difference_histogram_bins']); edges=np.linspace(0,1,bins+1,dtype=np.float64); groups={}; maxima={}
+    def add(key,a):
+        h=np.histogram(np.abs(a),bins=edges)[0]; groups[key]=groups.get(key,np.zeros(bins,dtype=np.int64))+h; maxima[key]=max(maxima.get(key,0.),float(np.max(np.abs(a))))
+    bs=int(cfg['difference_batch_windows']); log('[Stage 0] Train-only signed-difference distribution')
+    for lo in tqdm(range(0,len(base),bs),desc='Difference histogram'):
+        hi=min(lo+bs,len(base)); x=np.asarray(base.x[lo:hi],dtype=np.float32); d={'D1':x[:,2]-x[:,1],'D2':x[:,1]-x[:,0]}
+        meta=base.w.iloc[lo:hi]
+        for name,a in d.items():
+            add(('overall','all',name),a); add(('overall','all','combined'),a)
+            for j,row in enumerate(meta.itertuples()):
+                add(('case',str(row.case_id),name),a[j]); add(('series',str(row.series_id),name),a[j])
+    combined=groups[('overall','all','combined')]; scale=hist_quantile(combined,float(cfg['difference_percentile']),bins)
+    scale_file.write_text(json.dumps({'diff_scale':scale,'percentile':cfg['difference_percentile'],'source':'Frozen Train 2760 windows, D1 and D2 pixels pooled','method':f'streaming histogram with {bins} equal bins over [0,1]','val_used':False},indent=2),encoding='utf-8')
+    rows=[]
+    for key,h in groups.items(): rows.append({'scope':key[0],'group':key[1],'difference':key[2],**stats_from_hist(h,bins,maxima[key])})
+    pd.DataFrame(rows).to_csv(sdir/'difference_statistics.csv',index=False)
+    clip={}; clip_n={}
+    for lo in tqdm(range(0,len(base),bs),desc='Difference clipping'):
+        hi=min(lo+bs,len(base)); x=np.asarray(base.x[lo:hi],dtype=np.float32); meta=base.w.iloc[lo:hi]
+        for name,a in [('D1',x[:,2]-x[:,1]),('D2',x[:,1]-x[:,0])]:
+            for j,row in enumerate(meta.itertuples()):
+                for scope,gid in [('overall','all'),('case',str(row.case_id)),('series',str(row.series_id))]:
+                    k=(scope,gid,name); clip.setdefault(k,[0,0]); clip_n[k]=clip_n.get(k,0)+a[j].size; clip[k][0]+=int(np.sum(a[j]<=-scale)); clip[k][1]+=int(np.sum(a[j]>=scale))
+    cr=[]
+    for k,(low,high) in clip.items():
+        n=clip_n[k]; cr.append({'scope':k[0],'group':k[1],'difference':k[2],'n_pixels':n,'clip_to_0_fraction':low/n,'clip_to_1_fraction':high/n,'total_clipped_fraction':(low+high)/n})
+    cdf=pd.DataFrame(cr); cdf.to_csv(sdir/'difference_clipping.csv',index=False)
+    rng=np.random.default_rng(cfg['stage1_seed']); sample=np.unique(np.linspace(0,len(base)-1,cfg['preview_windows']).round().astype(int)); tiprows=[]
+    fig,axs=plt.subplots(len(sample),3,figsize=(10,2.35*len(sample)),squeeze=False)
+    yy,xx=np.ogrid[:256,:256]
+    for r,i in enumerate(sample):
+        x=np.asarray(base.x[i],dtype=np.float32); d1=x[2]-x[1]; d2=x[1]-x[0]; m=base.w.iloc[i]; gx=float(m.gt_x-m.crop_x0); gy=float(m.gt_y-m.crop_y0); mask=(xx-gx)**2+(yy-gy)**2<=cfg['tip_radius_px']**2
+        bg=np.zeros((256,256),bool)
+        for _ in range(3):
+            for _try in range(100):
+                cx=int(rng.integers(11,245)); cy=int(rng.integers(11,245))
+                if (cx-gx)**2+(cy-gy)**2>(cfg['tip_radius_px']+20)**2: bg[cy-10:cy+11,cx-10:cx+11]=True; break
+        for name,d in [('D1',d1),('D2',d2)]: tiprows.append({'case_id':m.case_id,'series_id':m.series_id,'frame_index':m.frame_index,'difference':name,'tip_near_abs_mean':float(np.abs(d)[mask].mean()),'whole_roi_abs_mean':float(np.abs(d).mean()),'random_background_abs_mean':float(np.abs(d)[bg].mean())})
+        enc1=np.clip(.5+d1/(2*scale),0,1); enc2=np.clip(.5+d2/(2*scale),0,1)
+        for c,(im,title) in enumerate([(x[2],'Current'),(enc1,'D1 signed'),(enc2,'D2 signed')]):
+            ax=axs[r,c]; ax.imshow(im,cmap='gray',vmin=0,vmax=1); ax.scatter([gx],[gy],s=12,facecolors='none',edgecolors='red'); ax.scatter([m.raw_x-m.crop_x0],[m.raw_y-m.crop_y0],s=10,c='cyan'); ax.axis('off'); ax.set_title(f'{m.case_id} {m.frame_index} {title}',fontsize=7)
+    plt.tight_layout(); plt.savefig(sdir/'difference_preview.png',dpi=140,bbox_inches='tight'); plt.close(); pd.DataFrame(tiprows).to_csv(sdir/'difference_tip_vs_background.csv',index=False)
+    overall=cdf[cdf.scope.eq('overall')]; warning=bool((overall.total_clipped_fraction>0.02).any() or (cdf[cdf.scope.eq('case')].total_clipped_fraction>0.10).any())
+    log(f'[Stage0] DIFF_SCALE=P99.5={scale:.8f}; clipping warning={warning}')
+    return scale
+
+def model_hash(p5,seed):
+    seed_all(seed); m=p5.HRNetTipHeatmap('hrnet_w18_small_v2',True,1,(64,64)); h=tensor_hash(m); del m; return h
+
+def run_model(p7d,p5,ds,train_idx,held_idx,arm,seed,fold,held,device,rdir,cfg,run_hash,log):
+    rdir.mkdir(parents=True,exist_ok=True); done=rdir/'complete.json'; pp=rdir/'predictions.csv'; cp=rdir/'checkpoint.pth'; lp=rdir/'training_log.csv'; eff=seed+fold
+    if done.exists() and pp.exists() and cp.exists() and lp.exists():
+        z=json.loads(done.read_text());
+        if z.get('run_hash')==run_hash: log(f'  [Resume] {arm} fold={fold} case={held}'); return pd.read_csv(pp),pd.read_csv(lp),z['initialization_hash']
+        raise RuntimeError(f'Config hash mismatch: {rdir}')
+    init=model_hash(p5,eff); model,tl=p7d.P7B.train_model(p5,ds,train_idx,eff,device,f'{arm} seed={seed} fold={fold}',3,16,log); pred=p7d.P7B.infer(model,ds,held_idx,device,.75,16)
+    if not np.isfinite(pred.select_dtypes('number')).all().all(): raise RuntimeError(f'Non-finite prediction {arm} fold {fold}')
+    pred.to_csv(pp,index=False); tl.to_csv(lp,index=False); torch.save({'model_state_dict':model.state_dict(),'arm':arm,'seed':seed,'fold':fold,'held_case':held,'config':cfg},cp)
+    meta={'complete':True,'run_hash':run_hash,'arm':arm,'base_seed':seed,'effective_seed':eff,'fold':fold,'held_case':held,'initialization_hash':init,'finished_at':time.strftime('%Y-%m-%d %H:%M:%S')}; done.write_text(json.dumps(meta,indent=2),encoding='utf-8'); del model; torch.cuda.empty_cache(); return pred,tl,init
+
+def metric_rows(p7d,F,G,seed):
+    rows=[]; by=[]
+    for arm,g in [('F',F),('G',G)]:
+        for alpha,col in [(1.0,'candidate_error_px'),(.75,'final_error_px')]:
+            q=p7d.metrics(g[col].to_numpy(),g.raw_error_px.to_numpy()); q.update({'arm':arm,'alpha':alpha,'base_seed':seed,'case_macro_mean':g.groupby('case_id')[col].mean().mean()}); rows.append(q)
+        for case,cg in g.groupby(g.case_id.astype(str)): by.append({'base_seed':seed,'case_id':case,'arm':arm,'mean':cg.final_error_px.mean(),'median':cg.final_error_px.median(),'p95':np.percentile(cg.final_error_px,95)})
+    return pd.DataFrame(rows),pd.DataFrame(by)
+
+def stage1(p7d,p5,dsets,cases,device,out,cfg,scale,log):
+    sdir=out/'stage1'; sdir.mkdir(parents=True,exist_ok=True); seed=cfg['stage1_seed']; rh=canonical_hash({'cfg':cfg,'diff_scale':scale}); parts={'F':[],'G':[]}; audits=[]
+    log('[Stage 1] One-seed 8-case OOF; Val forbidden')
+    for fold,held in enumerate(cases,1):
+        eff=seed+fold; hf=model_hash(p5,eff); hg=model_hash(p5,eff); same=hf==hg; audits.append({'fold':fold,'held_case':held,'effective_seed':eff,'F_hash':hf,'G_hash':hg,'same':same})
+        if not same: pd.DataFrame(audits).to_csv(sdir/'initialization_audit.csv',index=False); raise RuntimeError(f'Initialization mismatch fold {fold}')
+        log(f'[Stage1 {fold}/8] held={held} paired_init=PASS')
+        for arm in ['F','G']:
+            ds=dsets[arm]; tr=np.where(ds.w.case_id.astype(str).ne(held))[0]; ev=np.where(ds.w.case_id.astype(str).eq(held))[0]
+            p,t,h=run_model(p7d,p5,ds,tr,ev,arm,seed,fold,held,device,sdir/f'runs/fold_{fold}_{held}/arm_{arm}',cfg,rh,log); p['arm']=arm; p['fold']=fold; p['base_seed']=seed; parts[arm].append(p)
+            if h!=hf: raise RuntimeError(f'Saved initialization hash mismatch fold {fold} arm {arm}')
+        pd.DataFrame(audits).to_csv(sdir/'initialization_audit.csv',index=False)
+    F=pd.concat(parts['F'],ignore_index=True); G=pd.concat(parts['G'],ignore_index=True); F.to_csv(sdir/'oof_F_predictions.csv',index=False); G.to_csv(sdir/'oof_G_predictions.csv',index=False)
+    met,by=metric_rows(p7d,F,G,seed); met.to_csv(sdir/'metrics.csv',index=False); by.to_csv(sdir/'by_case.csv',index=False)
+    safe=[]; hard=[]; pers=[]
+    for arm,g in [('F',F),('G',G)]:
+        s,h=p7d.safety_rescue(g,arm,seed,'OOF'); safe+=s; hard+=h; pers.append(p7d.persistent_rows(g,arm,seed,'OOF'))
+    pd.DataFrame(safe).to_csv(sdir/'easy_safety.csv',index=False); pd.DataFrame(hard).to_csv(sdir/'hard_rescue.csv',index=False); pd.DataFrame(pers).to_csv(sdir/'persistent_harmful.csv',index=False)
+    piv=by.pivot(index='case_id',columns='arm',values='mean'); piv['delta_G_minus_F']=piv.G-piv.F; fm=met[(met.arm=='F')&(met.alpha==.75)].iloc[0]; gm=met[(met.arm=='G')&(met.alpha==.75)].iloc[0]
+    wins=int((piv.delta_G_minus_F < -cfg['stage1_tie_px']).sum()); ties=int((piv.delta_G_minus_F.abs()<=cfg['stage1_tie_px']).sum()); losses=8-wins-ties; harm_ok=gm.harmful_gt10<=fm.harmful_gt10+cfg['stage1_max_harmful_gt10_increase_abs']; peaks_ok=float(F.peak.mean())>1e-6 and float(G.peak.mean())>1e-6
+    passed=bool(gm.case_macro_mean<fm.case_macro_mean and wins+ties>=5 and harm_ok and peaks_ok)
+    ext=pd.read_csv(ROOT/cfg['phase7d_dir']/'oof_metrics_by_seed.csv'); ext=ext[(ext.base_seed.eq(seed))&(ext.alpha.eq(.75))&(ext.arm.isin(['B','C']))]; ext.to_csv(sdir/'external_phase7d_baselines.csv',index=False)
+    dec={'stage1_pass':passed,'F_case_macro_mean':float(fm.case_macro_mean),'G_case_macro_mean':float(gm.case_macro_mean),'delta_G_minus_F':float(gm.case_macro_mean-fm.case_macro_mean),'wins':wins,'ties':ties,'losses':losses,'noninferior_cases':wins+ties,'F_frame_mean':float(fm['mean']),'G_frame_mean':float(gm['mean']),'F_median':float(fm['median']),'G_median':float(gm['median']),'F_p95':float(fm.p95),'G_p95':float(gm.p95),'F_harmful_gt10':float(fm.harmful_gt10),'G_harmful_gt10':float(gm.harmful_gt10),'harmful_gate_pass':bool(harm_ok),'heatmap_collapse_absent':bool(peaks_ok),'val_read':False,'test_used':False}; (sdir/'stage1_decision.json').write_text(json.dumps(dec,indent=2),encoding='utf-8')
+    piv[['F','G']].plot(kind='bar',figsize=(9,4)); plt.ylabel('Mean error (px)'); plt.title('Phase 8B Stage1 OOF by case'); plt.tight_layout(); (out/'figures').mkdir(exist_ok=True); plt.savefig(out/'figures/stage1_case_comparison.png',dpi=180); plt.close(); log(f"[Stage1 Decision] {'PASS' if passed else 'FAIL'} F={fm.case_macro_mean:.3f} G={gm.case_macro_mean:.3f} wins/ties/losses={wins}/{ties}/{losses}")
+    return passed,dec
+
+def write_readme(out,cfg,scale,dec):
+    state='PASS' if dec['stage1_pass'] else 'FAIL'
+    txt=f'''# Phase 8B — Explicit Temporal-Difference Input
+
+Train-only `DIFF_SCALE` (pooled signed D1/D2 absolute pixel P99.5): **{scale:.8f}**. Signed differences were encoded around neutral 0.5. No per-frame normalization was used.
+
+## Frozen design
+
+- F input: `[current, 0.5, 0.5]`.
+- G input: `[current, encoded(current-prev1), encoded(prev1-prev2)]`.
+- Shared current `raw_t` crop, 256×256; target `true_tip_t`; weighted MSE; 3 epochs; alpha=.75.
+- No future frame, augmentation, tuning, Test, or new label.
+
+## Stage 1: {state}
+
+- F case-macro mean: {dec['F_case_macro_mean']:.3f} px.
+- G case-macro mean: {dec['G_case_macro_mean']:.3f} px.
+- G-F: {dec['delta_G_minus_F']:+.3f} px.
+- G wins/ties/losses: {dec['wins']}/{dec['ties']}/{dec['losses']}.
+- Harmful >10: {dec['F_harmful_gt10']:.2%} → {dec['G_harmful_gt10']:.2%}.
+
+Frame difference is not catheter motion: it can include patient/C-arm/background/contrast/noise changes. Therefore results only concern explicit temporal-change representation.
+'''
+    if not dec['stage1_pass']: txt+='\nThe prespecified gate failed. Stage 2 and Val were not run.\n'
+    (out/'README.md').write_text(txt,encoding='utf-8')
+
+def run_full_model(p7d,p5,train_ds,val_ds,arm,seed,device,rdir,cfg,run_hash,log):
+    rdir.mkdir(parents=True,exist_ok=True); done=rdir/'complete.json'; pp=rdir/'predictions.csv'; cp=rdir/'checkpoint.pth'; lp=rdir/'training_log.csv'
+    if done.exists() and pp.exists() and cp.exists() and lp.exists():
+        z=json.loads(done.read_text())
+        if z.get('run_hash')==run_hash: log(f'  [Resume] FINAL {arm} seed={seed}'); return pd.read_csv(pp),pd.read_csv(lp),z['initialization_hash']
+        raise RuntimeError(f'Config hash mismatch: {rdir}')
+    init=model_hash(p5,seed); model,tl=p7d.P7B.train_model(p5,train_ds,np.arange(len(train_ds)),seed,device,f'FINAL {arm} seed={seed}',3,16,log); pred=p7d.P7B.infer(model,val_ds,np.arange(len(val_ds)),device,.75,16)
+    pred.to_csv(pp,index=False); tl.to_csv(lp,index=False); torch.save({'model_state_dict':model.state_dict(),'arm':arm,'seed':seed,'config':cfg},cp)
+    meta={'complete':True,'run_hash':run_hash,'arm':arm,'base_seed':seed,'initialization_hash':init,'finished_at':time.strftime('%Y-%m-%d %H:%M:%S')}; done.write_text(json.dumps(meta,indent=2),encoding='utf-8'); del model; torch.cuda.empty_cache(); return pred,tl,init
+
+def activity_table(base,cfg,split):
+    rows=[]; yy,xx=np.ogrid[:256,:256]
+    for i in tqdm(range(len(base)),desc=f'{split} difference activity'):
+        x=np.asarray(base.x[i],dtype=np.float32); d1=np.abs(x[2]-x[1]); d2=np.abs(x[1]-x[0]); m=base.w.iloc[i]; gx=float(m.gt_x-m.crop_x0); gy=float(m.gt_y-m.crop_y0); mask=(xx-gx)**2+(yy-gy)**2<=cfg['tip_radius_px']**2
+        rows.append({'case_id':str(m.case_id),'series_id':str(m.series_id),'frame_index':int(m.frame_index),'diff_activity_1':float(d1.mean()),'diff_activity_2':float(d2.mean()),'tip_diff_activity_1':float(d1[mask].mean()),'tip_diff_activity_2':float(d2[mask].mean())})
+    return pd.DataFrame(rows)
+
+def all_analysis(p7d,F,G,seed,split):
+    met,by=metric_rows(p7d,F,G,seed); met['split']=split; by['split']=split; safe=[]; hard=[]; pers=[]
+    for arm,g in [('F',F),('G',G)]:
+        s,h=p7d.safety_rescue(g,arm,seed,split); safe+=s; hard+=h; pers.append(p7d.persistent_rows(g,arm,seed,split))
+    return met,by,pd.DataFrame(safe),pd.DataFrame(hard),pd.DataFrame(pers)
+
+def plot_line(path,x,y,title,ylabel):
+    plt.figure(figsize=(7,4)); plt.axhline(0,color='black',lw=.8); plt.plot([str(v) for v in x],y,marker='o'); plt.title(title); plt.ylabel(ylabel); plt.tight_layout(); plt.savefig(path,dpi=180); plt.close()
+
+def stage2(p7d,p5,dsets,valsets,base_train,base_val,cases,device,out,cfg,scale,log):
+    sdir=out/'stage2'; sdir.mkdir(parents=True,exist_ok=True); rh=canonical_hash({'cfg':cfg,'diff_scale':scale}); allp={'F':[],'G':[]}; mets=[]; bys=[]; safes=[]; hards=[]; pers=[]; audits=[]
+    stage1_audit=out/'stage1/initialization_audit.csv'
+    if stage1_audit.exists():
+        old=pd.read_csv(stage1_audit)
+        for _,r in old.iterrows(): audits.append({'scope':'OOF','base_seed':cfg['stage1_seed'],'fold':int(r['fold']),'held_case':str(r['held_case']),'F_hash':r['F_hash'],'G_hash':r['G_hash'],'same':bool(r['same'])})
+    # Reuse the completed, config-matched Stage1 seed.
+    for arm in ['F','G']:
+        x=pd.read_csv(out/f'stage1/oof_{arm}_predictions.csv'); x['base_seed']=cfg['stage1_seed']; allp[arm].append(x)
+    m,b,s,h,p=all_analysis(p7d,allp['F'][0],allp['G'][0],cfg['stage1_seed'],'OOF'); mets.append(m); bys.append(b); safes.append(s); hards.append(h); pers.append(p)
+    for seed in cfg['seeds'][1:]:
+        parts={'F':[],'G':[]}
+        for fold,held in enumerate(cases,1):
+            eff=seed+fold; hf=model_hash(p5,eff); hg=model_hash(p5,eff); same=hf==hg; audits.append({'scope':'OOF','base_seed':seed,'fold':fold,'held_case':held,'F_hash':hf,'G_hash':hg,'same':same})
+            if not same: raise RuntimeError(f'Stage2 initialization mismatch seed {seed} fold {fold}')
+            log(f'[Stage2 OOF] seed={seed} fold={fold}/8 held={held} paired_init=PASS')
+            for arm in ['F','G']:
+                ds=dsets[arm]; tr=np.where(ds.w.case_id.astype(str).ne(held))[0]; ev=np.where(ds.w.case_id.astype(str).eq(held))[0]
+                x,t,ih=run_model(p7d,p5,ds,tr,ev,arm,seed,fold,held,device,sdir/f'runs/oof/seed_{seed}/fold_{fold}_{held}/arm_{arm}',cfg,rh,log); x['base_seed']=seed; x['fold']=fold; x['arm']=arm; parts[arm].append(x)
+                if ih!=hf: raise RuntimeError(f'Stage2 saved initialization mismatch seed {seed} fold {fold} arm {arm}')
+            pd.DataFrame(audits).to_csv(sdir/'initialization_audit.csv',index=False)
+        F=pd.concat(parts['F'],ignore_index=True); G=pd.concat(parts['G'],ignore_index=True); allp['F'].append(F); allp['G'].append(G); m,b,s,h,p=all_analysis(p7d,F,G,seed,'OOF'); mets.append(m); bys.append(b); safes.append(s); hards.append(h); pers.append(p)
+    OF=pd.concat(allp['F'],ignore_index=True); OG=pd.concat(allp['G'],ignore_index=True); OF.to_csv(sdir/'oof_F_all_seeds.csv',index=False); OG.to_csv(sdir/'oof_G_all_seeds.csv',index=False)
+    metrics=pd.concat(mets,ignore_index=True); by=pd.concat(bys,ignore_index=True); safe=pd.concat(safes,ignore_index=True); hard=pd.concat(hards,ignore_index=True); persistent=pd.concat(pers,ignore_index=True)
+    metrics.to_csv(sdir/'metrics_by_seed.csv',index=False); by.to_csv(sdir/'metrics_by_case_seed.csv',index=False); safe.to_csv(sdir/'easy_safety_by_seed.csv',index=False); hard.to_csv(sdir/'hard_rescue_by_seed.csv',index=False); persistent.to_csv(sdir/'persistent_by_seed.csv',index=False)
+    piv=metrics[metrics.alpha.eq(.75)].pivot(index='base_seed',columns='arm',values='case_macro_mean').reset_index(); piv['delta_G_minus_F']=piv.G-piv.F; piv.to_csv(sdir/'temporal_delta_by_seed.csv',index=False)
+    cb=by.pivot_table(index=['base_seed','case_id'],columns='arm',values='mean').reset_index(); cb['delta_G_minus_F']=cb.G-cb.F; cb.to_csv(sdir/'case_seed_matrix.csv',index=False)
+    oof_dec={'G_wins_seeds':int((piv.delta_G_minus_F<0).sum()),'G_losses_seeds':int((piv.delta_G_minus_F>0).sum()),'mean_improvement_px':float(-piv.delta_G_minus_F.mean()),'improvement_sd_px':float((-piv.delta_G_minus_F).std(ddof=1)),'improvement_min_px':float((-piv.delta_G_minus_F).min()),'improvement_max_px':float((-piv.delta_G_minus_F).max()),'case_seed_wins':int((cb.delta_G_minus_F<0).sum()),'case_seed_total':len(cb),'G_persistent_better_seeds':int(sum(persistent[persistent.arm.eq('G')].set_index('base_seed').persistent_frames_ge3 < persistent[persistent.arm.eq('F')].set_index('base_seed').persistent_frames_ge3)),'val_read':False,'test_used':False}
+    (sdir/'oof_decision.json').write_text(json.dumps(oof_dec,indent=2),encoding='utf-8'); log(f"[OOF frozen] G wins {oof_dec['G_wins_seeds']}/5; mean improvement={oof_dec['mean_improvement_px']:.3f}px")
+    # Preserve historical engineering comparators without retraining.
+    for src,dst in [('oof_metrics_by_seed.csv','external_phase7d_metrics_by_seed.csv'),('easy_case_safety_by_seed.csv','external_phase7d_easy_safety.csv'),('hard_case_rescue_by_seed.csv','external_phase7d_hard_rescue.csv'),('persistent_harmful_by_seed.csv','external_phase7d_persistent.csv')]: pd.read_csv(ROOT/cfg['phase7d_dir']/src).to_csv(sdir/dst,index=False)
+    # Full Train and matched Val are allowed only after the OOF decision has been frozen above.
+    vals={'F':[],'G':[]}; vm=[]; vb=[]; vs=[]; vh=[]; vp=[]; full_audit=[]
+    for seed in cfg['seeds']:
+        hf=model_hash(p5,seed); hg=model_hash(p5,seed); same=hf==hg; full_audit.append({'scope':'FULL','base_seed':seed,'fold':0,'held_case':'Val','F_hash':hf,'G_hash':hg,'same':same})
+        if not same: raise RuntimeError(f'Full initialization mismatch seed {seed}')
+        pred={}
+        for arm in ['F','G']:
+            x,t,ih=run_full_model(p7d,p5,dsets[arm],valsets[arm],arm,seed,device,sdir/f'runs/final/seed_{seed}/arm_{arm}',cfg,rh,log); x['base_seed']=seed; x['arm']=arm; vals[arm].append(x); pred[arm]=x
+            if ih!=hf: raise RuntimeError(f'Full saved initialization mismatch seed {seed} arm {arm}')
+        m,b,s,h,p=all_analysis(p7d,pred['F'],pred['G'],seed,'Val'); vm.append(m); vb.append(b); vs.append(s); vh.append(h); vp.append(p)
+    pd.concat([pd.DataFrame(audits),pd.DataFrame(full_audit)],ignore_index=True).to_csv(sdir/'initialization_audit.csv',index=False)
+    VF=pd.concat(vals['F'],ignore_index=True); VG=pd.concat(vals['G'],ignore_index=True); VF.to_csv(sdir/'val_F_all_seeds.csv',index=False); VG.to_csv(sdir/'val_G_all_seeds.csv',index=False)
+    valm=pd.concat(vm,ignore_index=True); valby=pd.concat(vb,ignore_index=True); valsafe=pd.concat(vs,ignore_index=True); valhard=pd.concat(vh,ignore_index=True); valpers=pd.concat(vp,ignore_index=True)
+    valm.to_csv(sdir/'val_metrics_by_seed.csv',index=False); valby.to_csv(sdir/'val_metrics_by_case_seed.csv',index=False); valsafe.to_csv(sdir/'val_easy_safety_by_seed.csv',index=False); valhard.to_csv(sdir/'val_hard_rescue_by_seed.csv',index=False); valpers.to_csv(sdir/'val_persistent_by_seed.csv',index=False)
+    vdelta=valm[valm.alpha.eq(.75)].pivot(index='base_seed',columns='arm',values='mean').reset_index(); vdelta['delta_G_minus_F']=vdelta.G-vdelta.F; vdelta.to_csv(sdir/'val_delta_by_seed.csv',index=False)
+    dirs=piv[['base_seed','delta_G_minus_F']].merge(vdelta[['base_seed','delta_G_minus_F']],on='base_seed',suffixes=('_oof','_val')); dirs['oof_direction']=np.where(dirs.delta_G_minus_F_oof<0,'win','lose'); dirs['val_direction']=np.where(dirs.delta_G_minus_F_val<0,'win','lose'); dirs.to_csv(sdir/'oof_vs_val_direction.csv',index=False)
+    conf=[]
+    for split,a,b in [('OOF',OF,OG),('Val',VF,VG)]:
+        for arm,g in [('F',a),('G',b)]:
+            for seed,sg in g.groupby('base_seed'): conf.append({'split':split,'base_seed':seed,'arm':arm,'peak_mean':sg.peak.mean(),'peak_median':sg.peak.median(),'margin_mean':sg.margin.mean(),'margin_median':sg.margin.median()})
+    pd.DataFrame(conf).to_csv(sdir/'confidence.csv',index=False)
+    atr=activity_table(base_train,cfg,'OOF'); ava=activity_table(base_val,cfg,'Val'); gainrows=[]
+    for split,F,G,a in [('OOF',OF,OG,atr),('Val',VF,VG,ava)]:
+        F=F.copy(); G=G.copy(); a=a.copy()
+        for table in (F,G,a):
+            table['case_id']=table['case_id'].astype(str)
+            table['series_id']=table['series_id'].astype(str)
+            table['frame_index']=table['frame_index'].astype(int)
+        keys=['case_id','series_id','frame_index']; z=F[keys+['base_seed','final_error_px']].merge(G[keys+['base_seed','final_error_px']],on=keys+['base_seed'],suffixes=('_F','_G')).merge(a,on=keys); z['G_gain_vs_F']=z.final_error_px_F-z.final_error_px_G
+        for seed,sg in z.groupby('base_seed'):
+            row={'split':split,'base_seed':seed,'n':len(sg)}
+            for col in ['diff_activity_1','diff_activity_2','tip_diff_activity_1','tip_diff_activity_2']: row['spearman_gain_vs_'+col]=sg.G_gain_vs_F.rank().corr(sg[col].rank())
+            gainrows.append(row)
+    pd.DataFrame(gainrows).to_csv(sdir/'difference_gain_analysis.csv',index=False)
+    fig=out/'figures'; plot_line(fig/'oof_delta_by_seed.png',piv.base_seed,piv.delta_G_minus_F,'OOF G-F case-macro mean','G - F (px)'); plot_line(fig/'val_delta_by_seed.png',vdelta.base_seed,vdelta.delta_G_minus_F,'Val G-F mean','G - F (px)')
+    mat=cb.pivot(index='case_id',columns='base_seed',values='delta_G_minus_F'); lim=max(.1,float(np.nanmax(np.abs(mat.to_numpy())))); plt.figure(figsize=(8,5)); im=plt.imshow(mat,aspect='auto',cmap='coolwarm',vmin=-lim,vmax=lim); plt.colorbar(im,label='G-F px'); plt.xticks(range(len(mat.columns)),mat.columns,rotation=30); plt.yticks(range(len(mat.index)),mat.index); plt.title('Case × seed difference delta'); plt.tight_layout(); plt.savefig(fig/'case_seed_heatmap.png',dpi=180); plt.close()
+    plt.figure(figsize=(5,5)); plt.axhline(0,color='black',lw=.7); plt.axvline(0,color='black',lw=.7); plt.scatter(dirs.delta_G_minus_F_oof,dirs.delta_G_minus_F_val); plt.xlabel('OOF G-F'); plt.ylabel('Val G-F'); plt.tight_layout(); plt.savefig(fig/'oof_vs_val_direction.png',dpi=180); plt.close()
+    valwins=int((vdelta.delta_G_minus_F<0).sum()); reversals=int(((dirs.oof_direction=='win')&(dirs.val_direction=='lose')).sum())
+    if oof_dec['G_wins_seeds']>=4 and valwins>=4: choice=1
+    elif oof_dec['G_wins_seeds']>=3 or valwins>=3: choice=2
+    else: choice=3
+    final={'decision':choice,'decision_text':{1:'Explicit temporal-difference representation is stable enough to become the temporal baseline',2:'Explicit differences have partial benefit but remain cross-case unstable',3:'Explicit differences have no reliable benefit; stop this representation line'}[choice],'oof_G_wins':oof_dec['G_wins_seeds'],'oof_mean_improvement_px':oof_dec['mean_improvement_px'],'val_G_wins':valwins,'oof_win_val_lose_count':reversals,'test_used':False}; (sdir/'final_decision.json').write_text(json.dumps(final,indent=2),encoding='utf-8')
+    return final,oof_dec,piv,vdelta
+
+def write_final_readme(out,cfg,scale,stage1_dec,final,oof_dec,piv,vdelta):
+    txt=(out/'README.md').read_text(encoding='utf-8')
+    txt+=f'''\n## Five-seed OOF and matched Val\n\n- OOF G wins: {oof_dec['G_wins_seeds']}/5; average improvement: {oof_dec['mean_improvement_px']:.3f} px.\n- Val G wins: {final['val_G_wins']}/5.\n- OOF-win/Val-loss reversals: {final['oof_win_val_lose_count']}.\n- Final frozen decision: **{final['decision']} — {final['decision_text']}**.\n\nNo later phase, longer window, gate, alpha tuning, or Test was run.\n'''
+    (out/'README.md').write_text(txt,encoding='utf-8')
+
+def main():
+    ap=argparse.ArgumentParser(); ap.add_argument('--config',required=True); args=ap.parse_args(); cfg=json.loads(Path(args.config).read_text()); out=ROOT/cfg['output_dir']; out.mkdir(parents=True,exist_ok=True); (out/'figures').mkdir(exist_ok=True); log=Logger(out/'phase8b_run.log'); (out/'config.json').write_text(json.dumps(cfg,indent=2),encoding='utf-8')
+    log('='*52); log('Phase 8B — EXPLICIT TEMPORAL DIFFERENCE'); log('='*52); log('Stage0 Train-only scale → Stage1 one-seed OOF → gate; Test FORBIDDEN')
+    p7d=load_source('phase7d_runtime_for_8b',ROOT/'scripts/phase7d_repeat_seed_stability.src'); p5=p7d.P7B.load_p5(ROOT); device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if device.type!='cuda': raise RuntimeError('CUDA required')
+    d=pd.read_csv(ROOT/cfg['manifest']); d['case_code']=d.case_code.astype(str); w=p7d.P7B.build_windows(d); wt=w[w.split.eq('train')].reset_index(drop=True); wv=w[w.split.eq('val')].reset_index(drop=True)
+    if len(wt)!=2760 or len(wv)!=920: raise RuntimeError(f'Legal target mismatch Train={len(wt)} Val={len(wv)}')
+    if set(d[d.split.eq('train')].case_code)&set(d[d.split.eq('val')].case_code): raise RuntimeError('Case leakage')
+    base=p7d.P7B.WindowDataset(wt,str(ROOT/cfg['phase7b_dir']/'cache/train_stacks.npy'),'temporal',cfg['sigma']); scale=stage0(base,cfg,out,log); cfg['DIFF_SCALE']=scale; (out/'config.json').write_text(json.dumps(cfg,indent=2),encoding='utf-8')
+    dsets={a:DifferenceDataset(base,a,scale) for a in ['F','G']}; x,y,_=dsets['G'][0]; log(f'[Sanity] G input={tuple(x.shape)} range=({x.min():.4f},{x.max():.4f}) target={tuple(y.shape)} finite={bool(torch.isfinite(x).all())}')
+    passed,dec=stage1(p7d,p5,dsets,sorted(wt.case_id.astype(str).unique()),device,out,cfg,scale,log); write_readme(out,cfg,scale,dec)
+    if not passed: (out/'run_status.json').write_text(json.dumps({'status':'complete_stage1_fail','stage2_run':False,'val_read':False,'test_used':False},indent=2)); log('[STOP] Stage1 failed. Stage2 and Val were not run.'); return
+    base_val=p7d.P7B.WindowDataset(wv,str(ROOT/cfg['phase7b_dir']/'cache/val_stacks.npy'),'temporal',cfg['sigma']); valsets={a:DifferenceDataset(base_val,a,scale) for a in ['F','G']}
+    final,oof_dec,piv,vdelta=stage2(p7d,p5,dsets,valsets,base,base_val,sorted(wt.case_id.astype(str).unique()),device,out,cfg,scale,log); write_final_readme(out,cfg,scale,dec,final,oof_dec,piv,vdelta); (out/'run_status.json').write_text(json.dumps({'status':'complete','stage2_run':True,'val_read':True,'test_used':False},indent=2)); log(f"[Done] Decision {final['decision']}: {final['decision_text']}. No later phase started.")
+
+if __name__=='__main__': main()

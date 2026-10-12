@@ -1,0 +1,24 @@
+{
+  "status": "complete",
+  "training": false,
+  "model_inference": false,
+  "test_used": false,
+  "frozen_val_preserved": true,
+  "fresh_counts": {
+    "cases": 19,
+    "series": 57,
+    "frames": 12752
+  },
+  "scenario_1": {
+    "cases": 8,
+    "series": 12,
+    "frames": 2784
+  },
+  "scenario_2": {
+    "cases": 14,
+    "series": 22,
+    "frames": 5781,
+    "new_cases": 6
+  },
+  "conclusion": 1
+}

@@ -1,0 +1,13 @@
+{
+  "G_wins_seeds": 3,
+  "G_losses_seeds": 2,
+  "mean_improvement_px": -0.23464784847826153,
+  "improvement_sd_px": 0.8404925685339022,
+  "improvement_min_px": -1.702941157755916,
+  "improvement_max_px": 0.43128471693254156,
+  "case_seed_wins": 20,
+  "case_seed_total": 40,
+  "G_persistent_better_seeds": 3,
+  "val_read": false,
+  "test_used": false
+}
