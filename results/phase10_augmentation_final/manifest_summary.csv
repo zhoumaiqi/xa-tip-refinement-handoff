@@ -1,0 +1,4 @@
+split,split_group,frames,cases,series
+train,EXTENDED_NEW_TRAIN,1329,4,5
+train,ORIGINAL_TRAIN,2784,8,12
+val,FROZEN_VAL,928,3,4

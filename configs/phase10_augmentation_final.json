@@ -1,0 +1,45 @@
+{
+  "manifest": "results/phase10_augmentation_final/development_manifest.csv",
+  "output_dir": "results/phase10_augmentation_final",
+  "external_root": "C:/Users/Walter/Desktop/TIP",
+  "model_variant": "hrnet_w18_small_v2",
+  "pretrained": true,
+  "input_size": 256,
+  "heatmap_size": 64,
+  "sigma": 2.0,
+  "alpha": 0.75,
+  "batch_size": 16,
+  "epochs": 3,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0,
+  "num_workers": 0,
+  "seeds": [20260919, 20260920, 20260921, 20260922],
+  "conditions": ["A0_none", "A2_jitter8"],
+  "augmentation": {
+    "intensity_probability": 0.8,
+    "contrast_range": [0.8, 1.2],
+    "gamma_range": [0.85, 1.15],
+    "brightness_range": [-0.05, 0.05],
+    "noise_sigma_range": [0.005, 0.02],
+    "blur_probability": 0.15,
+    "blur_sigma_range": [0.3, 1.0],
+    "jitter_probability": 1.0,
+    "jitter_px": 8
+  },
+  "protocol": {
+    "stage": "Phase 10 final reproducibility configuration",
+    "primary_evaluation": "8-case leave-one-case-out OOF",
+    "selection_before_frozen_val": true,
+    "model_unchanged": true,
+    "heatmap_decoder_unchanged": true,
+    "alpha_fixed": true,
+    "final_test_cases": ["908", "771"]
+  },
+  "final_training": {
+    "condition": "A2_jitter8",
+    "seed": 20260919,
+    "purpose": "all-development-train candidate checkpoint before one Frozen Val confirmation",
+    "frozen_val_used_for_training": false,
+    "final_test_used_for_training": false
+  }
+}

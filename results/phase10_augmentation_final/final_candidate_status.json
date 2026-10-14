@@ -1,0 +1,10 @@
+{
+  "status": "complete",
+  "checkpoint": "results\\phase10_augmentation_final\\checkpoints\\phase10_A2_jitter8_all_train_seed20260919_epoch3.pth",
+  "condition": "A2_jitter8",
+  "seed": 20260919,
+  "train_frames": 4113,
+  "train_cases": 12,
+  "frozen_val_used": false,
+  "final_test_used": false
+}

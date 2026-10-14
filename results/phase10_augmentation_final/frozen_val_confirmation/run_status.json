@@ -1,0 +1,11 @@
+{
+  "status": "complete",
+  "frozen_val_used": true,
+  "final_test_used": false,
+  "seed": 20260919,
+  "saved_jitter_checkpoint": "results\\phase10_augmentation_final\\checkpoints\\phase10_A2_jitter8_all_train_seed20260919_epoch3.pth",
+  "baseline_training_condition": "A0_none",
+  "train_frames": 4113,
+  "val_frames": 928,
+  "val_cases": 3
+}
