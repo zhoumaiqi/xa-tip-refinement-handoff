@@ -1,0 +1,30 @@
+{
+  "status": "complete",
+  "restored_at_utc": "2026-10-15T08:55:28.368808+00:00",
+  "review_revision": 2025,
+  "manifest_hash": "eea085b6c3e41323b231043f2d39dcecbb582729d4d4cdcf1d3d3c7ccf1fbc51",
+  "original_manifest_sha256": "40780eec0efde587e741f07bfc5777527f1f537a71fe5539a59023bce9cfc9db",
+  "frames": 4113,
+  "cases": 12,
+  "series": 17,
+  "counts": {
+    "visible": 2944,
+    "not_visible": 728,
+    "uncertain": 441
+  },
+  "copied_dicom_bytes": 8634249590,
+  "all_copies_sha256_verified": true,
+  "source_images_unchanged": true,
+  "notes_included": false,
+  "gt_coordinates_unchanged": true,
+  "uncertainty_meaning": "User-reviewed blurry/difficult frames; preserve as a separate hard subset",
+  "recommended_initial_training_manifest": "visible.csv",
+  "validation_or_test_copied": false,
+  "original_images_root": "C:/Users/Walter/Desktop/TIP",
+  "recovery_sources": {
+    "final_export": "C:\\Users\\Walter\\Downloads\\20261015_074221_625689.zip",
+    "export_sha256": "f0f5447f00894ad1460b82ea8a321ef3d04a4e5dbe5d45b56f2354de4d7e2630",
+    "manifests": "Recovered unchanged from Windows Recycle Bin",
+    "images": "Rebuilt from original DICOM; verified against previous checksums"
+  }
+}

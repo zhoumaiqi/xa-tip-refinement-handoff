@@ -1,0 +1,3 @@
+# Medical images remain local; commit manifests and review labels only.
+*.dcm
+/data/reviewed_20261015/images/
